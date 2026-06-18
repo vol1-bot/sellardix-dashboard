@@ -435,26 +435,37 @@ function parsePPLSchedule(rows) {
 }
 
 // ── Parse: 트랙킹 데이터 (F열=검색량, AC열=일별 총 매출) ─────────
+// 날짜 여러 포맷 지원: "2026. 5. 14" / "2026.5.14" / "5/14/2026" / "2026-05-14"
+function parseDateKey(raw) {
+  const s = String(raw||'').trim();
+  let m;
+  m=s.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+  if (m) return `${parseInt(m[2])}.${parseInt(m[3])}`;
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) return `${parseInt(m[1])}.${parseInt(m[2])}`;
+  m=s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${parseInt(m[2])}.${parseInt(m[3])}`;
+  return null;
+}
+
 function parseTracking(rows) {
   const map={};
   if (!rows.length) return map;
-  for (const r of rows.slice(1)) {
-    // 날짜: E열(4) 우선, 없으면 A열(0)
-    const dateRaw=String(r[4]||r[0]||'').replace(/\\/g,'').trim();
-    const m1=dateRaw.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
-    if (!m1) continue;
-    const key=`${m1[2]}.${m1[3]}`;
+  for (const r of rows) {
+    // E열(4) 우선, A열(0) 차선
+    const key = parseDateKey(r[4]) || parseDateKey(r[0]);
+    if (!key) continue;
     map[key]={
-      searchVolume:       parseNum(r[5])||0,   // F열 - 검색량
-      search_셀라딕스:    parseNum(r[5])||0,
-      search_131앰플:     parseNum(r[6])||0,
-      search_크림:        parseNum(r[7])||0,
-      search_토너:        parseNum(r[8])||0,
-      쿠팡_131앰플:       parseNum(r[9])||0,
-      쿠팡_크림:          parseNum(r[10])||0,
-      쿠팡_토너:          parseNum(r[11])||0,
-      자사몰_131앰플:     parseNum(r[12])||0,
-      dailySales:         parseNum(r[28])||0,  // AC열 - 일별 총 매출
+      searchVolume:    parseNum(r[5])||0,   // F열 - 검색량
+      search_셀라딕스: parseNum(r[5])||0,
+      search_131앰플:  parseNum(r[6])||0,
+      search_크림:     parseNum(r[7])||0,
+      search_토너:     parseNum(r[8])||0,
+      쿠팡_131앰플:    parseNum(r[9])||0,
+      쿠팡_크림:       parseNum(r[10])||0,
+      쿠팡_토너:       parseNum(r[11])||0,
+      자사몰_131앰플:  parseNum(r[12])||0,
+      dailySales:      parseNum(r[28])||0,  // AC열 - 일별 총 매출
     };
   }
   return map;
@@ -765,67 +776,59 @@ function switchTab(tab) {
 }
 
 // ================================================================
-// MOCK DATA
+// MOCK 상수 — 시트 미연결 시 표시용 (실값 기준, 텍스트 시트 그대로)
 // ================================================================
+const MOCK_SALES=[
+  {month:1,target:200000000,achieved:216778583,rate:108.4},
+  {month:2,target:250000000,achieved:262482609,rate:105.0},
+  {month:3,target:400000000,achieved:489129661,rate:122.3},
+  {month:4,target:700000000,achieved:743661824,rate:106.2},
+  {month:5,target:450000000,achieved:450869831,rate:100.2},
+  {month:6,target:1150000000,achieved:824990299,rate:71.7},
+];
+const _mk=(m,d,name)=>({month:m,week:weekOfMonth(d),day:d,name,cost:0,type:pplType(name),link:PPL_LINKS[name]||''});
+const MOCK_PPL=[
+  _mk(6,1,'조이스키 PA'),_mk(6,1,'이우곤 PA'),_mk(6,1,'김다윤 PA'),
+  _mk(6,2,'히로케미 PA'),_mk(6,2,'송대익 PA (롱)'),_mk(6,2,'쟁지 PA'),
+  _mk(6,3,'레페리 샒의삶 일반 PPL(롱품)'),_mk(6,3,'좌두 PA'),_mk(6,3,'파파버즈 PPL (롱)'),_mk(6,3,'조하니 PPL (롱)'),_mk(6,3,'비공스 조유리 PPL'),
+  _mk(6,4,'만닥토이 PA'),_mk(6,4,'베얄랭 PA (롱품)'),_mk(6,4,'늘이농 PA'),_mk(6,4,'코닥즈 PA'),_mk(6,4,'임만열면 PPL(롱품)'),
+  _mk(6,5,'이상한과자가게 PPL (숏품)'),_mk(6,5,'주니루PA'),
+  _mk(6,8,'기획전&오뜩 오픈 플진'),_mk(6,8,'김신웅 PA'),
+  _mk(6,9,'세아쎔 PPL(숏품)'),
+  _mk(6,10,'플리즈 PA'),_mk(6,10,'원진원 PA'),
+  _mk(6,11,'동디 PA'),
+  _mk(6,15,'슈히 PA'),
+  _mk(6,17,'승헌쓰 PPL (숏품)'),_mk(6,17,'[레페리] 민카롱 기획 PPL(롱품)'),
+  _mk(6,20,'SEOULITE PPL (롱품)'),
+  _mk(6,22,'우조뱀 용병 PPL(롱품)'),_mk(6,22,'어쩔수없는윤화 PPL(롱품)'),_mk(6,22,'퉁장잔고 명원이 PA'),_mk(6,22,'윤희 PA'),_mk(6,22,'전핑공 PA'),_mk(6,22,'모르는지 PPL (롱품)'),
+  _mk(6,30,'하루의 하루 숏폼 PPL'),
+];
+// 트랙킹 mock — 스크린샷에서 읽은 F열(검색량)·AC열(일별 총매출) 실값
+const MOCK_TRACKING={
+  '6.1': {searchVolume:850, dailySales:80478459,  search_셀라딕스:850},
+  '6.2': {searchVolume:600, dailySales:56315631,  search_셀라딕스:600},
+  '6.3': {searchVolume:620, dailySales:72066840,  search_셀라딕스:620},
+  '6.4': {searchVolume:620, dailySales:53877792,  search_셀라딕스:620},
+  '6.5': {searchVolume:770, dailySales:78776775,  search_셀라딕스:770},
+  '6.6': {searchVolume:790, dailySales:178343631, search_셀라딕스:790},
+  '6.7': {searchVolume:540, dailySales:30908816,  search_셀라딕스:540},
+  '6.8': {searchVolume:610, dailySales:46074383,  search_셀라딕스:610},
+  '6.9': {searchVolume:570, dailySales:22336516,  search_셀라딕스:570},
+  '6.10':{searchVolume:510, dailySales:20507457,  search_셀라딕스:510},
+  '6.11':{searchVolume:500, dailySales:17291169,  search_셀라딕스:500},
+  '6.12':{searchVolume:570, dailySales:21701901,  search_셀라딕스:570},
+  '6.13':{searchVolume:440, dailySales:25890184,  search_셀라딕스:440},
+  '6.14':{searchVolume:460, dailySales:26249954,  search_셀라딕스:460},
+  '6.15':{searchVolume:470, dailySales:20426819,  search_셀라딕스:470},
+  '6.16':{searchVolume:540, dailySales:18319905,  search_셀라딕스:540},
+  '6.17':{searchVolume:450, dailySales:22541065,  search_셀라딕스:450},
+};
 function loadMock() {
+  STORE.salesData=MOCK_SALES; STORE.pplEvents=MOCK_PPL;
+  STORE.trackingData=MOCK_TRACKING;
+  const ds={}; Object.entries(MOCK_TRACKING).forEach(([k,v])=>{ds[k]=v.dailySales;}); STORE.dailySales=ds;
+  STORE.pplMemo=[];
   document.getElementById('setup-guide').classList.remove('hidden');
-  STORE.salesData=[
-    {month:1,target:200000000,achieved:216778583,rate:108.4},
-    {month:2,target:250000000,achieved:262482609,rate:105.0},
-    {month:3,target:400000000,achieved:489129661,rate:122.3},
-    {month:4,target:700000000,achieved:743661824,rate:106.2},
-    {month:5,target:450000000,achieved:450869831,rate:100.2},
-    {month:6,target:1150000000,achieved:824990299,rate:71.7},
-  ];
-  // 일별 매출: 트랙킹 AC열 기준 예시값 (구글 시트 연결 시 실값으로 교체됨)
-  STORE.dailySales={};
-  // 목 PPL 이벤트 — 실제 세부일정 시트 텍스트 기준으로 작성
-  // 시트 연결 시 자동으로 교체됨
-  const mk=(m,d,name)=>({month:m,week:weekOfMonth(d),day:d,name,cost:0,type:pplType(name),link:PPL_LINKS[name]||''});
-  STORE.pplEvents=[
-    mk(6,1,'조이스키 PA'), mk(6,1,'이우곤 PA'), mk(6,1,'김다윤 PA'),
-    mk(6,2,'히로케미 PA'), mk(6,2,'송대익 PA (롱)'), mk(6,2,'쟁지 PA'),
-    mk(6,3,'레페리 샒의삶 일반 PPL(롱품)'), mk(6,3,'좌두 PA'), mk(6,3,'파파버즈 PPL (롱)'), mk(6,3,'조하니 PPL (롱)'),
-    mk(6,4,'만닥토이 PA'), mk(6,4,'베얄랭 PA (롱품)'), mk(6,4,'늘이농 PA'), mk(6,4,'코닥즈 PA'), mk(6,4,'임만열면 PPL(롱품)'),
-    mk(6,5,'이상한과자가게 PPL (숏품)'), mk(6,5,'주니루PA'),
-    mk(6,8,'기획전&오뜩 오픈 플진'), mk(6,8,'김신웅 PA'),
-    mk(6,9,'세아쎔 PPL(숏품)'),
-    mk(6,10,'플리즈 PA'), mk(6,10,'원진원 PA'),
-    mk(6,11,'동디 PA'),
-    mk(6,15,'슈히 PA'),
-    mk(6,17,'승헌씨 PPL (숏품)'), mk(6,17,'[레페리] 민카롱 기획 PPL(롱품)'),
-    mk(6,20,'SEOULITE PPL (롱품)'),
-    mk(6,22,'우조뱀 용병 PPL(롱품)'), mk(6,22,'어쩔수없는윤화 PPL(롱품)'), mk(6,22,'퉁장잔고 명원이 PA'), mk(6,22,'윤희 PA'), mk(6,22,'전핑공 PA'), mk(6,22,'모르는지 PPL (롱품)'),
-    mk(6,30,'하루의 하루 숏폼 PPL'),
-  ];
-  // 트랙킹 데이터: AC열(일별 매출) + F열(검색량) 예시
-  STORE.trackingData={
-    '6.1': {searchVolume:9200,dailySales:28000000,search_셀라딕스:9200},
-    '6.2': {searchVolume:8700,dailySales:32000000,search_셀라딕스:8700},
-    '6.3': {searchVolume:15400,dailySales:45000000,search_셀라딕스:15400}, // 샒의삶 업로드
-    '6.4': {searchVolume:12100,dailySales:19000000,search_셀라딕스:12100},
-    '6.5': {searchVolume:9800,dailySales:27000000,search_셀라딕스:9800},
-    '6.6': {searchVolume:7200,dailySales:15000000,search_셀라딕스:7200},
-    '6.7': {searchVolume:8500,dailySales:38000000,search_셀라딕스:8500},
-    '6.8': {searchVolume:9100,dailySales:22000000,search_셀라딕스:9100},
-    '6.9': {searchVolume:8300,dailySales:18000000,search_셀라딕스:8300},
-    '6.10':{searchVolume:14200,dailySales:29000000,search_셀라딕스:14200}, // 민카롱 업로드
-    '6.11':{searchVolume:11500,dailySales:35000000,search_셀라딕스:11500},
-    '6.12':{searchVolume:10800,dailySales:52000000,search_셀라딕스:10800},
-    '6.13':{searchVolume:9700,dailySales:31000000,search_셀라딕스:9700},
-    '6.14':{searchVolume:8900,dailySales:28000000,search_셀라딕스:8900},
-    '6.15':{searchVolume:9300,dailySales:31000000,search_셀라딕스:9300},
-    '6.16':{searchVolume:8100,dailySales:24000000,search_셀라딕스:8100},
-    '6.17':{searchVolume:13600,dailySales:19000000,search_셀라딕스:13600}, // 오늘도희다 업로드
-    '6.18':{searchVolume:10200,dailySales:27500000,search_셀라딕스:10200},
-  };
-  // dailySales를 trackingData AC열에서 파생
-  STORE.dailySales={};
-  Object.entries(STORE.trackingData).forEach(([k,v])=>{ STORE.dailySales[k]=v.dailySales; });
-  STORE.pplMemo=[
-    {label:'PPL',text:'131앰플 고성과 인플루언서 131토너로 재진행\n(쇼마, 늘이농)'},
-    {label:'레페리',text:'레페리 협업 PPL(1억 이상)\n-샒의삶(구독자 41.3만) → 6/3(수) 업로드\n-민카롱(구독자 12만) → 6/10(화) 업로드\n-달님 → 6/8 예정\n-오늘도희다 → 6/17 예정\n-하영필름·코코라일리·혜리미 진행 예정'},
-  ];
 }
 
 // ================================================================
@@ -846,36 +849,40 @@ async function init() {
   if(memo){ memo.remove(); document.getElementById('ppl-table').classList.remove('hidden'); }
   updateHeader(); calYear=CURRENT_YEAR; calMonth=CURRENT_MONTH;
 
-  try {
-    const [overText, schedText, trackText] = await Promise.allSettled([
-      fetchCSV(GID_OVERVIEW),
-      fetchCSV(GID_SCHEDULE),
-      fetchCSV(GID_TRACKING),
-    ]);
+  // ── 3개 시트 병렬 fetch (각각 독립적으로 실패 허용) ──
+  const [overRes, schedRes, trackRes] = await Promise.allSettled([
+    fetchCSV(GID_OVERVIEW),
+    fetchCSV(GID_SCHEDULE),
+    fetchCSV(GID_TRACKING),
+  ]);
 
-    const overRows  = overText.status==='fulfilled' ? parseCSV(overText.value) : [];
-    const schedRows = schedText.status==='fulfilled' ? parseCSV(schedText.value) : [];
-    const trackRows = trackText.status==='fulfilled' ? parseCSV(trackText.value) : [];
+  const overRows  = overRes.status==='fulfilled'  ? parseCSV(overRes.value)  : [];
+  const schedRows = schedRes.status==='fulfilled' ? parseCSV(schedRes.value) : [];
+  const trackRows = trackRes.status==='fulfilled' ? parseCSV(trackRes.value) : [];
 
-    const sd = parseSalesWide(overRows);
-    if (!sd) throw new Error('매출 데이터 없음');
+  let anyMock = false;
 
-    STORE.salesData    = sd;
-    // 세부 일정(달력 그리드) → PPL 이벤트
-    STORE.pplEvents    = parsePPLSchedule(schedRows);
-    // 트랙킹(AC열=일별 총매출, F열=검색량)
-    STORE.trackingData = parseTracking(trackRows);
-    STORE.pplMemo      = parsePPLWide(overRows, CURRENT_MONTH);
+  // ── Overview: 월별 목표/달성 매출 ──
+  const sd = parseSalesWide(overRows);
+  STORE.salesData = sd || MOCK_SALES;
+  if (!sd) anyMock = true;
 
-    // 일별 매출: 트랙킹 AC열 우선
-    const trackDs={};
-    Object.entries(STORE.trackingData).forEach(([k,v])=>{ if(v.dailySales) trackDs[k]=v.dailySales; });
-    STORE.dailySales = Object.assign({}, parseDailySales(schedRows), trackDs);
+  // ── 세부 일정: PPL 달력 그리드 → 각 날짜에 인플루언서 이름 그대로 ──
+  const pplLive = parsePPLSchedule(schedRows);
+  STORE.pplEvents = pplLive.length ? pplLive : MOCK_PPL;
+  if (!pplLive.length) anyMock = true;
 
-  } catch(e) {
-    console.warn('[대시보드] 연결 실패:', e.message, '→ 미리보기');
-    loadMock();
-  }
+  // ── 트랙킹: F열=검색량, AC열=일별 총매출 ──
+  STORE.trackingData = parseTracking(trackRows);
+  const trackDs={};
+  Object.entries(STORE.trackingData).forEach(([k,v])=>{ if(v.dailySales) trackDs[k]=v.dailySales; });
+  STORE.dailySales = trackDs;
+  if (!Object.keys(trackDs).length) anyMock = true;
+
+  // ── PPL 메모 (overview 시트) ──
+  STORE.pplMemo = parsePPLWide(overRows, CURRENT_MONTH);
+
+  if (anyMock) document.getElementById('setup-guide').classList.remove('hidden');
 
   // Always render
   renderKPI(STORE.salesData);
