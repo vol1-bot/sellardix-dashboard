@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>셀라딕스 마케팅 대시보드</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
+    .progress-fill { transition: width 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+    .spin { animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .tab-active  { border-bottom: 2px solid #4f46e5; color: #4f46e5; font-weight: 600; }
+    .tab-inactive { border-bottom: 2px solid transparent; color: #6b7280; }
+    .cal-day:hover { background: #f5f3ff; cursor: pointer; }
+    .cal-day.today { background: #eef2ff; }
+    .cal-day.other-month { opacity: 0.35; }
+    .modal-enter { animation: modalIn 0.25s ease; }
+    @keyframes modalIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:none; } }
+    .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px;
+            font-size:11px; font-weight:500; cursor:pointer; transition:opacity 0.15s; white-space:nowrap; }
+    .chip:hover { opacity:0.8; }
+    .chip-ppl    { background:#ede9fe; color:#5b21b6; }
+    .chip-leperee{ background:#fce7f3; color:#9d174d; }
+    .chip-pa     { background:#d1fae5; color:#065f46; }
+    .chip-ad     { background:#fef3c7; color:#92400e; }
+    .chip-other  { background:#f3f4f6; color:#374151; }
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#d1d5db; border-radius:3px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ===== HEADER ===== -->
+<header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex-shrink-0 flex items-center justify-center">
+        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+      </div>
+      <h1 class="text-base font-bold text-gray-900">셀라딕스 마케팅 대시보드</h1>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="kpi-strip" class="hidden sm:flex items-center gap-3 text-xs text-gray-500">
+        <span>목표 <strong id="h-target" class="text-gray-800">—</strong></span>
+        <span>달성 <strong id="h-achieved" class="text-gray-800">—</strong></span>
+        <span id="h-rate-wrap" class="font-semibold">—%</span>
+      </span>
+      <span id="month-badge" class="bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap">— 월</span>
+      <button onclick="init()" class="text-gray-400 hover:text-indigo-600 p-2 rounded-lg hover:bg-gray-100">
+        <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <!-- Tab bar -->
+  <div class="max-w-6xl mx-auto px-4 flex gap-0 border-t border-gray-100">
+    <button onclick="switchTab('summary')" id="tab-summary"
+      class="tab-active px-5 py-2.5 text-sm transition-colors">요약</button>
+    <button onclick="switchTab('calendar')" id="tab-calendar"
+      class="tab-inactive px-5 py-2.5 text-sm transition-colors">📅 캘린더</button>
+  </div>
+</header>
+
+<!-- ===== TAB 1: SUMMARY ===== -->
+<div id="view-summary" class="max-w-6xl mx-auto px-4 py-5 space-y-5">
+
+  <!-- KPI CARD -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
+    <div class="flex items-center justify-between mb-5">
+      <p class="text-sm font-semibold text-gray-600">이번 달 매출 달성율</p>
+      <span id="kpi-status-badge" class="text-xs font-medium px-2.5 py-1 rounded-full hidden"></span>
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-5">
+      <div class="text-center">
+        <p class="text-xs text-gray-400 mb-1">목표 매출</p>
+        <p class="text-xl sm:text-2xl font-bold text-gray-600" id="kpi-target">—</p>
+      </div>
+      <div class="text-center border-x border-gray-100">
+        <p class="text-xs text-gray-400 mb-1">달성 매출</p>
+        <p class="text-xl sm:text-2xl font-bold text-gray-900" id="kpi-achieved">—</p>
+      </div>
+      <div class="text-center">
+        <p class="text-xs text-gray-400 mb-1">달성율</p>
+        <p class="text-xl sm:text-2xl font-bold text-indigo-600" id="kpi-rate">—%</p>
+      </div>
+    </div>
+    <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+      <div id="progress-bar" class="h-3 rounded-full bg-indigo-500 progress-fill" style="width:0%"></div>
+    </div>
+    <div class="flex justify-between mt-1.5">
+      <span class="text-xs text-gray-400">0%</span><span class="text-xs text-gray-400">100%</span>
+    </div>
+  </div>
+
+  <!-- PPL MEMO -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <p class="text-sm font-semibold text-gray-600">이번 달 PPL 현황</p>
+      <span id="ppl-count" class="text-xs bg-gray-100 text-gray-500 font-medium px-2.5 py-1 rounded-full">—</span>
+    </div>
+    <div id="ppl-container">
+      <table class="w-full text-sm" id="ppl-table">
+        <thead><tr class="border-b border-gray-100">
+          <th class="text-left text-xs text-gray-400 font-medium pb-3 pr-4 w-28">날짜</th>
+          <th class="text-left text-xs text-gray-400 font-medium pb-3 pr-4">인플루언서</th>
+          <th class="text-left text-xs text-gray-400 font-medium pb-3 w-20">형태</th>
+        </tr></thead>
+        <tbody id="ppl-tbody"><tr><td colspan="3" class="py-8 text-center text-gray-400 text-sm">로딩 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MONTHLY CHART -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
+    <p class="text-sm font-semibold text-gray-600 mb-5">월별 매출 추이 (목표 vs 달성)</p>
+    <div style="position:relative; height:260px;"><canvas id="sales-chart"></canvas></div>
+  </div>
+
+  <!-- SETUP GUIDE -->
+  <div id="setup-guide" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-5 fade-in">
+    <div class="flex gap-3">
+      <span class="text-amber-500 flex-shrink-0">⚠️</span>
+      <div class="text-sm text-amber-800 space-y-2">
+        <p class="font-semibold">미리보기 데이터 표시 중 — 구글 시트 "웹에 게시" 필요</p>
+        <ol class="list-decimal list-inside space-y-1 text-amber-700 text-xs">
+          <li>구글 시트 → 파일 → 공유 → <strong>웹에 게시</strong></li>
+          <li>각 탭 선택 → CSV → 게시 클릭</li>
+          <li>대시보드 새로고침</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 2: CALENDAR ===== -->
+<div id="view-calendar" class="hidden max-w-6xl mx-auto px-4 py-5">
+
+  <!-- Month nav -->
+  <div class="flex items-center justify-between mb-4">
+    <button onclick="calNav(-1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </button>
+    <h2 id="cal-title" class="text-lg font-bold text-gray-900">2026년 6월</h2>
+    <button onclick="calNav(1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Monthly KPI strip for calendar tab -->
+  <div id="cal-kpi-strip" class="grid grid-cols-3 gap-3 mb-4">
+    <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 text-center shadow-sm">
+      <p class="text-xs text-gray-400">목표</p>
+      <p class="text-base font-bold text-gray-700" id="cal-target">—</p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 text-center shadow-sm">
+      <p class="text-xs text-gray-400">달성</p>
+      <p class="text-base font-bold text-gray-900" id="cal-achieved">—</p>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-100 px-4 py-3 text-center shadow-sm">
+      <p class="text-xs text-gray-400">달성율</p>
+      <p class="text-base font-bold text-indigo-600" id="cal-rate">—%</p>
+    </div>
+  </div>
+
+  <!-- Calendar grid -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="grid grid-cols-7 border-b border-gray-100">
+      <template id="day-header-tpl"></template>
+    </div>
+    <div id="cal-grid" class="grid grid-cols-7"></div>
+  </div>
+
+  <!-- Legend -->
+  <div class="flex flex-wrap gap-3 mt-3 text-xs text-gray-500">
+    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-violet-200 inline-block"></span>PPL</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-pink-200 inline-block"></span>레페리</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-200 inline-block"></span>PA</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-200 inline-block"></span>협력광고</span>
+    <span class="flex items-center gap-1.5"><span class="font-semibold text-emerald-600">초록</span> = 일별 매출 (AC열)</span>
+    <span class="flex items-center gap-1.5"><span class="font-semibold text-violet-400">검</span> = 검색량 (F열)</span>
+    <span class="ml-auto text-gray-400">날짜 클릭 → 상세 보기</span>
+  </div>
+</div>
+
+<!-- ===== DAY DETAIL MODAL ===== -->
+<div id="day-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto modal-enter">
+    <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-2xl">
+      <div>
+        <p class="text-lg font-bold text-gray-900" id="modal-date">—</p>
+        <p class="text-xs text-gray-400" id="modal-week-label">—</p>
+      </div>
+      <button onclick="closeModal()" class="p-2 rounded-lg hover:bg-gray-100 text-gray-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="px-6 py-5 space-y-5" id="modal-body">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</div>
+
+<footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-xs text-gray-300 mt-6">
+  데이터 출처: Google Sheets · 셀라딕스 마케팅팀
+</footer>
+
+<script>
+// ================================================================
+// ✅ 설정 영역
+// ================================================================
+const PUB_BASE     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSepABFK0vAgCXz_YIuIIJHnI2uvWP4j9rgekTz9yIFOYc5g2AsWrMeuU8ElpiMf_pixWqbBMKYaN8u/pub?output=csv';
+const GID_OVERVIEW = '0';
+const GID_TRACKING = '445294510';   // 트랙킹 시트 (E열=날짜, F열=검색량, AC열=일별 총매출)
+const GID_SCHEDULE = '750135544';   // 세부 일정 시트 (달력 그리드 형식)
+
+// PPL 광고 링크 설정 ─ 인플루언서 이름(시트 그대로): 'URL' 형식으로 추가
+const PPL_LINKS = {
+  // 예: '샒의삶': 'https://www.youtube.com/watch?v=xxxxx',
+};
+
+// 레페리 소속 인플루언서 목록 (이름이 포함되면 leperee 타입)
+const LEPEREE_NAMES = ['샒의삶','민카롱','달님','혜리미','하영필름','오늘도희다','코코라일리','민가든','데일리제나','헤이즐','재리','털난새우','승헌씨','민카롱'];
+
+// PPL 항목 타입 분류
+const PPL_TYPE_MAP = [
+  { keywords: LEPEREE_NAMES, type: 'leperee' },
+  { keywords: ['협력광고','올영 성과형','올리브영'], type: 'ad' },
+];
+// ================================================================
+
+const NOW            = new Date();
+const CURRENT_YEAR   = NOW.getFullYear();
+const CURRENT_MONTH  = NOW.getMonth() + 1;
+let   calYear        = CURRENT_YEAR;
+let   calMonth       = CURRENT_MONTH;
+let   salesChart     = null;
+let   STORE          = {};
+
+// ── CSV fetch ───────────────────────────────────────────────────
+async function fetchCSV(gid) {
+  const url = gid === GID_OVERVIEW ? PUB_BASE : `${PUB_BASE}&gid=${gid}`;
+  const res = await fetch(url, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} gid=${gid}`);
+  return res.text();
+}
+
+// ── CSV parser ──────────────────────────────────────────────────
+function parseCSV(text) {
+  return text.trim().split(/\r?\n/).map(line => {
+    const cols = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; continue; }
+      cur += ch;
+    }
+    cols.push(cur.trim());
+    return cols;
+  });
+}
+
+// ── Utilities ───────────────────────────────────────────────────
+function parseNum(s) {
+  if (!s) return 0;
+  const clean = String(s).replace(/[₩,원\s]/g,'').trim();
+  if (clean.endsWith('억')) return parseFloat(clean)*1e8;
+  if (clean.endsWith('만')) return parseFloat(clean)*1e4;
+  return parseFloat(clean)||0;
+}
+function fmtWon(n) {
+  if (!n||isNaN(n)) return '—';
+  if (Math.abs(n)>=1e8) { const v=n/1e8; return (Number.isInteger(v)?v:v.toFixed(1))+'억'; }
+  if (Math.abs(n)>=1e4) return Math.round(n/1e4).toLocaleString('ko-KR')+'만';
+  return n.toLocaleString('ko-KR');
+}
+function fmtWonFull(n) {
+  if (!n||isNaN(n)) return '—';
+  return n.toLocaleString('ko-KR')+'원';
+}
+function rateColors(r) {
+  if (r>=100) return { text:'text-green-600', bar:'bg-green-500', badge:'bg-green-50 text-green-700' };
+  if (r>=80)  return { text:'text-indigo-600', bar:'bg-indigo-500', badge:'bg-indigo-50 text-indigo-700' };
+  if (r>=60)  return { text:'text-orange-500', bar:'bg-orange-400', badge:'bg-orange-50 text-orange-700' };
+  return        { text:'text-red-500', bar:'bg-red-400', badge:'bg-red-50 text-red-700' };
+}
+function daysInMonth(y,m) { return new Date(y,m,0).getDate(); }
+function weekOfMonth(d) { return Math.ceil(d/7); }
+
+function pplType(name) {
+  if (!name) return 'other';
+  const n = name.trim();
+  // PA 판단: 이름 끝이 " PA" 이거나 " PA (" 포함
+  if (/ PA$/.test(n) || / PA[\s\(（]/.test(n) || n.endsWith('PA')) return 'pa';
+  // 플친톡 / 올영픽 / 기획전 = 협력광고(ad)
+  if (n.includes('플친톡') || n.includes('올영픽') || n.includes('기획전') || n.includes('플진')) return 'ad';
+  // [레페리] 태그
+  if (n.startsWith('[레페리]') || n.includes('레페리')) return 'leperee';
+  for (const { keywords, type } of PPL_TYPE_MAP) {
+    if (keywords.some(k => n.includes(k))) return type;
+  }
+  return 'ppl';
+}
+function chipClass(type) {
+  return { ppl:'chip-ppl', leperee:'chip-leperee', pa:'chip-pa', ad:'chip-ad', other:'chip-other' }[type]||'chip-other';
+}
+function weekLabel(w) { return `${w}주차`; }
+// "레페리 샒의삶 일반 PPL(롱품)" → "샒의삶" 처럼 핵심 이름만 추출
+function extractName(raw) {
+  let n = raw.trim()
+    .replace(/^\[레페리\]\s*/,'')
+    .replace(/^레페리\s+/,'')
+    .replace(/\s+(기획|일반|숏폼|롱폼)?\s*PPL\s*[\(（]?(롱품?|숏품?)?[\)）]?\s*$/i,'')
+    .replace(/\s+PA\s*[\(（]?[롱숏]?품?[\)）]?\s*$/i,'')
+    .trim();
+  return n.length>5 ? n.slice(0,5)+'…' : n;
+}
+
+// ── Parse: 월별 매출 가로형 ──────────────────────────────────────
+function monthCol(m) { return (m-1)*2+2; }
+function parseSalesWide(rows) {
+  const findRow = l => rows.find(r=>String(r[1]||'').trim()===l)||null;
+  const aRow = findRow('달성 매출'), tRow = findRow('목표 매출'), rRow = findRow('달성율');
+  if (!aRow&&!tRow) return null;
+  const result=[];
+  for (let m=1;m<=12;m++) {
+    const col=(m-1)*2+2;
+    const t=parseNum((tRow||[])[col]), a=parseNum((aRow||[])[col]);
+    const r=rRow ? parseFloat(String((rRow||[])[col]).replace('%',''))||0 : (t>0?Math.round(a/t*100):0);
+    if (t>0||a>0) result.push({month:m,target:t,achieved:a,rate:r});
+  }
+  return result.length?result:null;
+}
+
+// ── Parse: 일별 매출 ("M. D" | 매출) ───────────────────────────
+function parseDailySales(rows) {
+  const map={};
+  // 두 가지 형식: "M. D" (간단), "YYYY. M. D" (트랙킹)
+  for (const r of rows) {
+    const dateRaw = String(r[0]||'').replace(/\\/g,'').trim();
+    const amount  = parseNum(r[1]);
+    if (!dateRaw||!amount) continue;
+    // YYYY. M. D 형식
+    const m1 = dateRaw.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})$/);
+    if (m1) {
+      const key=`${m1[2]}.${m1[3]}`;
+      map[key]=(map[key]||0)+amount;
+      continue;
+    }
+    // M. D 형식
+    const m2 = dateRaw.match(/^(\d{1,2})\.\s*(\d{1,2})$/);
+    if (m2) {
+      const key=`${m2[1]}.${m2[2]}`;
+      map[key]=(map[key]||0)+amount;
+    }
+  }
+  return map;
+}
+
+// ── Parse: 세부 일정 달력 그리드 ─────────────────────────────────
+// 형식: 7컬럼(일~토) × N행, 날짜행 → 이벤트행 반복
+function parsePPLSchedule(rows) {
+  const events=[];
+  let curMonth=null, curYear=CURRENT_YEAR;
+  let colDays=[]; // [{day, ok(=belongs to curMonth)}] × 7
+
+  for (const row of rows) {
+    // 월 헤더 감지: "26년 06월", "2026년 6월" 등
+    const mMatch=row.join(' ').match(/(\d{2,4})년\s*(\d{1,2})월/);
+    if (mMatch) {
+      const y=parseInt(mMatch[1]);
+      curMonth=parseInt(mMatch[2]);
+      curYear=y<100?2000+y:y;
+      colDays=[];
+      continue;
+    }
+    if (!curMonth) continue;
+
+    // 요일 헤더 행 스킵 (일,월,화,수,목,금,토)
+    const DOW=['일','월','화','수','목','금','토'];
+    if (row.slice(0,7).filter(c=>DOW.includes(String(c||'').trim())).length>=3) continue;
+
+    // 날짜 행 감지: 첫 7컬럼 중 2개 이상이 정수 1-31
+    const maxDay=new Date(curYear,curMonth,0).getDate();
+    const nums=row.slice(0,7).map(c=>{const n=parseInt(String(c||'').trim());return(n>=1&&n<=31)?n:null;});
+    if (nums.filter(n=>n!==null).length>=2) {
+      // 이번 달 날짜 판별:
+      //   d > maxDay → 전달 잔여 (false)
+      //   maxSeen>20이고 d<10이면 → 다음달 시작 (false)
+      let maxSeen=0;
+      colDays=nums.map(d=>{
+        if (!d) return null;
+        if (d>maxDay) return {day:d,ok:false};          // 전달 날짜
+        if (maxSeen>20&&d<10) return {day:d,ok:false};  // 다음달 날짜
+        maxSeen=Math.max(maxSeen,d);
+        return {day:d,ok:true};
+      });
+      continue;
+    }
+
+    // 이벤트 행: 각 컬럼에서 텍스트 추출
+    if (!colDays.length) continue;
+    for (let col=0;col<Math.min(7,row.length);col++) {
+      const cd=colDays[col];
+      if (!cd||!cd.ok) continue;
+      const text=String(row[col]||'').trim();
+      if (!text) continue;
+      // 중복 방지
+      if (!events.find(e=>e.month===curMonth&&e.day===cd.day&&e.name===text)) {
+        events.push({
+          month:curMonth, week:weekOfMonth(cd.day), day:cd.day,
+          name:text, cost:0, type:pplType(text), link:PPL_LINKS[text]||''
+        });
+      }
+    }
+  }
+  return events;
+}
+
+// ── Parse: 트랙킹 데이터 (F열=검색량, AC열=일별 총 매출) ─────────
+function parseTracking(rows) {
+  const map={};
+  if (!rows.length) return map;
+  for (const r of rows.slice(1)) {
+    // 날짜: E열(4) 우선, 없으면 A열(0)
+    const dateRaw=String(r[4]||r[0]||'').replace(/\\/g,'').trim();
+    const m1=dateRaw.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);
+    if (!m1) continue;
+    const key=`${m1[2]}.${m1[3]}`;
+    map[key]={
+      searchVolume:       parseNum(r[5])||0,   // F열 - 검색량
+      search_셀라딕스:    parseNum(r[5])||0,
+      search_131앰플:     parseNum(r[6])||0,
+      search_크림:        parseNum(r[7])||0,
+      search_토너:        parseNum(r[8])||0,
+      쿠팡_131앰플:       parseNum(r[9])||0,
+      쿠팡_크림:          parseNum(r[10])||0,
+      쿠팡_토너:          parseNum(r[11])||0,
+      자사몰_131앰플:     parseNum(r[12])||0,
+      dailySales:         parseNum(r[28])||0,  // AC열 - 일별 총 매출
+    };
+  }
+  return map;
+}
+
+// ── PPL wide text (overview sheet) ───────────────────────────────
+function parsePPLWide(rows, month) {
+  const col=(month-1)*2+2;
+  const LABELS=['PPL','레페리','협력 광고','기타'];
+  return LABELS.map(label=>{
+    const row=rows.find(r=>String(r[1]||'').trim()===label||String(r[1]||'').includes(label));
+    const text=row?(row[col]||'').trim():'';
+    return text?{label,text}:null;
+  }).filter(Boolean);
+}
+
+// ================================================================
+// RENDER: Summary tab
+// ================================================================
+function renderKPI(sd) {
+  const cur=sd.find(d=>d.month===CURRENT_MONTH)||sd[sd.length-1];
+  if (!cur) return;
+  const r=Math.round(cur.rate), c=rateColors(cur.rate);
+  document.getElementById('kpi-target').textContent   = fmtWon(cur.target);
+  document.getElementById('kpi-achieved').textContent = fmtWon(cur.achieved);
+  const rEl=document.getElementById('kpi-rate');
+  rEl.textContent=r+'%'; rEl.className=`text-xl sm:text-2xl font-bold ${c.text}`;
+  const badge=document.getElementById('kpi-status-badge');
+  badge.textContent=cur.rate>=100?'목표 달성 🎉':cur.rate>=80?'순항 중':cur.rate>=60?'주의':'위험';
+  badge.className=`text-xs font-medium px-2.5 py-1 rounded-full ${c.badge}`;
+  badge.classList.remove('hidden');
+  setTimeout(()=>{ const bar=document.getElementById('progress-bar');
+    bar.style.width=Math.min(cur.rate,100)+'%'; bar.className=`h-3 rounded-full progress-fill ${c.bar}`; },150);
+  // header strip
+  document.getElementById('h-target').textContent=fmtWon(cur.target);
+  document.getElementById('h-achieved').textContent=fmtWon(cur.achieved);
+  const hw=document.getElementById('h-rate-wrap');
+  hw.textContent=r+'%'; hw.className=`font-semibold ${c.text}`;
+  document.getElementById('kpi-strip').classList.remove('hidden');
+}
+
+function renderChart(sd) {
+  const ctx=document.getElementById('sales-chart').getContext('2d');
+  if (salesChart) salesChart.destroy();
+  salesChart=new Chart(ctx,{
+    type:'bar',
+    data:{ labels:sd.map(d=>d.month+'월'),
+      datasets:[
+        { label:'목표', data:sd.map(d=>d.target),
+          backgroundColor:'rgba(99,102,241,0.12)', borderColor:'rgba(99,102,241,0.5)', borderWidth:1.5, borderRadius:6 },
+        { label:'달성', data:sd.map(d=>d.achieved),
+          backgroundColor:'rgba(99,102,241,0.75)', borderColor:'rgba(99,102,241,1)', borderWidth:0, borderRadius:6 }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'top', align:'end', labels:{ font:{family:"'Noto Sans KR',sans-serif",size:12}, usePointStyle:true, pointStyleWidth:8, padding:16 }},
+        tooltip:{ callbacks:{ label:c=>'  '+c.dataset.label+': '+fmtWon(c.parsed.y) }, titleFont:{family:"'Noto Sans KR',sans-serif"}, bodyFont:{family:"'Noto Sans KR',sans-serif"} }},
+      scales:{ x:{ grid:{display:false}, ticks:{font:{family:"'Noto Sans KR',sans-serif",size:12}} },
+        y:{ grid:{color:'rgba(0,0,0,0.04)'}, ticks:{font:{family:"'Noto Sans KR',sans-serif",size:11}, callback:v=>fmtWon(v)} } }
+    }
+  });
+}
+
+function renderPPLMemo(items) {
+  const tbody=document.getElementById('ppl-tbody');
+  document.getElementById('ppl-table').classList.add('hidden');
+  const existing=document.getElementById('ppl-memo-wrap');
+  if(existing)existing.remove();
+  if(!items.length){ tbody.innerHTML='<tr><td colspan="3" class="py-8 text-center text-gray-400 text-sm">이번 달 PPL 정보 없음</td></tr>'; return; }
+  const total=items.reduce((a,{text})=>a+text.split(/\n/).filter(l=>l.trim()).length,0);
+  document.getElementById('ppl-count').textContent=total+'건';
+  const colorMap={'PPL':'bg-blue-50 text-blue-700','레페리':'bg-purple-50 text-purple-700','협력 광고':'bg-amber-50 text-amber-700','기타':'bg-gray-100 text-gray-600'};
+  const wrap=document.createElement('div'); wrap.id='ppl-memo-wrap'; wrap.className='space-y-3';
+  wrap.innerHTML=items.map(({label,text})=>{
+    const cls=colorMap[label]||'bg-gray-100 text-gray-600';
+    const lines=text.split(/\n/).map(l=>l.trim()).filter(Boolean);
+    return `<div class="border border-gray-100 rounded-xl p-4">
+      <span class="inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full mb-3 ${cls}">${label}</span>
+      <ul class="space-y-1">${lines.map(l=>`<li class="text-sm text-gray-700 leading-relaxed">• ${l}</li>`).join('')}</ul>
+    </div>`;
+  }).join('');
+  document.getElementById('ppl-container').appendChild(wrap);
+}
+
+// ================================================================
+// RENDER: Calendar tab
+// ================================================================
+function renderCalendarKPI(sd, month) {
+  const cur=sd?sd.find(d=>d.month===month):null;
+  document.getElementById('cal-target').textContent   = cur?fmtWon(cur.target):'—';
+  document.getElementById('cal-achieved').textContent = cur?fmtWon(cur.achieved):'—';
+  const rEl=document.getElementById('cal-rate');
+  if(cur){ rEl.textContent=Math.round(cur.rate)+'%'; rEl.className=`text-base font-bold ${rateColors(cur.rate).text}`; }
+  else rEl.textContent='—';
+}
+
+function renderCalendar() {
+  const sd=STORE.salesData, ds=STORE.dailySales||{},
+        ppl=STORE.pplEvents||[], track=STORE.trackingData||{};
+  const year=calYear, month=calMonth;
+
+  document.getElementById('cal-title').textContent=`${year}년 ${month}월`;
+  renderCalendarKPI(sd, month);
+
+  const firstDow=new Date(year,month-1,1).getDay(); // 0=Sun
+  const totalDays=daysInMonth(year,month);
+  const prevDays=daysInMonth(year,month-1);
+  const todayKey=`${CURRENT_MONTH}.${NOW.getDate()}`;
+
+  // 이벤트 맵 구축:
+  //   dayEventsMap["M.D"] → 특정 날짜가 지정된 PPL 이벤트
+  //   weekEventsMap[week] → 주차만 있고 날짜 미지정 PPL 이벤트
+  const dayEventsMap={}, weekEventsMap={};
+  ppl.filter(e=>e.month===month).forEach(e=>{
+    if(e.day){
+      const k=`${month}.${e.day}`;
+      if(!dayEventsMap[k]) dayEventsMap[k]=[];
+      dayEventsMap[k].push(e);
+    } else {
+      if(!weekEventsMap[e.week]) weekEventsMap[e.week]=[];
+      weekEventsMap[e.week].push(e);
+    }
+  });
+
+  // Day headers
+  const headerEl=document.querySelector('.grid.grid-cols-7.border-b');
+  const DAYS=['일','월','화','수','목','금','토'];
+  headerEl.innerHTML=DAYS.map((d,i)=>`<div class="text-center text-xs font-medium py-2 ${i===0?'text-red-400':i===6?'text-blue-400':'text-gray-500'}">${d}</div>`).join('');
+
+  // Grid cells
+  const grid=document.getElementById('cal-grid');
+  grid.innerHTML='';
+
+  let dayCount=0, total=firstDow+totalDays;
+  while(total%7!==0) total++;
+
+  for(let i=0;i<total;i++){
+    const cell=document.createElement('div');
+    let day, isOther=false;
+
+    if(i<firstDow){ day=prevDays-firstDow+i+1; isOther=true; }
+    else if(i-firstDow<totalDays){ day=i-firstDow+1; dayCount++; }
+    else{ day=i-firstDow-totalDays+1; isOther=true; }
+
+    const isToday=!isOther&&year===CURRENT_YEAR&&month===CURRENT_MONTH&&day===NOW.getDate();
+    const dow=i%7;
+    const dayKey=`${month}.${day}`;
+    const w=!isOther?weekOfMonth(day):null;
+
+    // 트랙킹 AC열 매출 우선, 없으면 스케줄 시트 매출
+    const trackDay=!isOther?(track[dayKey]||null):null;
+    const sales=!isOther?(trackDay&&trackDay.dailySales?trackDay.dailySales:(ds[dayKey]||0)):0;
+    const searchVol=trackDay?trackDay.searchVolume:0;
+
+    // PPL 이벤트: 특정일 이벤트 + 주차 첫날(days 1,8,15,22,29)에만 주차 이벤트 표시
+    const isWeekFirst = !isOther && w && day===(w-1)*7+1;
+    const dayEvents=!isOther?[
+      ...(dayEventsMap[dayKey]||[]),
+      ...(isWeekFirst?(weekEventsMap[w]||[]):[]),
+    ]:[];
+
+    cell.className='cal-day border-b border-r border-gray-100 p-1.5 min-h-[90px] sm:min-h-[110px] relative '+
+      (isOther?'other-month bg-gray-50':'bg-white')+' '+(isToday?'today':'');
+    if(!isOther) cell.onclick=()=>openDayModal(year,month,day,sales,dayEvents,w);
+
+    let eventsHtml='';
+    if(!isOther&&dayEvents.length){
+      eventsHtml='<div class="flex flex-wrap gap-0.5 mt-0.5">'+
+        dayEvents.slice(0,3).map(e=>{
+          const cls=chipClass(e.type);
+          return '<span class="chip '+cls+' text-[10px] px-1.5 py-0" onclick="event.stopPropagation();openDayModal('+year+','+month+','+day+','+sales+',null,'+w+')">'+extractName(e.name)+'</span>';
+        }).join('')+
+        (dayEvents.length>3?'<span class="text-[10px] text-gray-400 ml-0.5">+'+( dayEvents.length-3)+'</span>':'')+
+      '</div>';
+    }
+
+    const salesHtml=(!isOther&&sales>0)
+      ?'<p class="text-[10px] text-emerald-600 font-semibold mt-0.5">'+fmtWon(sales)+'</p>'
+      :'';
+    const searchHtml=(!isOther&&searchVol>0)
+      ?'<p class="text-[10px] text-violet-400 font-medium">검 '+searchVol.toLocaleString('ko-KR')+'</p>'
+      :'';
+
+    const dayColor = isToday?'#4338ca':dow===0?'#f87171':dow===6?'#60a5fa':'#374151';
+    const dayWeight = isToday?'font-bold':'font-medium';
+    const todayDot  = isToday?'<span class="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-0.5"></span>':'';
+
+    cell.innerHTML=
+      '<div class="flex items-start justify-between">'+
+        '<span class="text-xs '+dayWeight+'" style="color:'+dayColor+'">'+day+'</span>'+
+        todayDot+
+      '</div>'+
+      salesHtml+
+      searchHtml+
+      eventsHtml;
+    grid.appendChild(cell);
+  }
+}
+
+function calNav(dir) {
+  calMonth+=dir;
+  if(calMonth>12){calMonth=1;calYear++;}
+  if(calMonth<1){calMonth=12;calYear--;}
+  renderCalendar();
+}
+
+// ================================================================
+// MODAL: Day detail
+// ================================================================
+function openDayModal(year, month, day, sales, events, week) {
+  const sd=STORE.salesData, tr=STORE.trackingData||{};
+  const pplAll=STORE.pplEvents||[];
+  const w=week||weekOfMonth(day);
+  const dayEvents=events||pplAll.filter(e=>e.month===month&&e.week===w);
+
+  document.getElementById('modal-date').textContent=`${year}년 ${month}월 ${day}일`;
+  document.getElementById('modal-week-label').textContent=`${month}월 ${w}주차`;
+
+  const dayKey=`${month}.${day}`;
+  const track=tr[dayKey]||null;
+
+  let html='';
+
+  // 일별 매출
+  html+=`<div>
+    <p class="text-xs font-semibold text-gray-400 uppercase mb-2">일별 매출</p>
+    <div class="bg-indigo-50 rounded-xl px-5 py-4 text-center">
+      <p class="text-2xl font-bold text-indigo-700">${sales?fmtWonFull(sales):'데이터 없음'}</p>
+    </div>
+  </div>`;
+
+  // PPL 이벤트
+  if(dayEvents.length){
+    html+=`<div>
+      <p class="text-xs font-semibold text-gray-400 uppercase mb-2">이번 주 PPL 일정 (${month}월 ${w}주차)</p>
+      <div class="space-y-2">`;
+    for(const e of dayEvents){
+      const cls=chipClass(e.type);
+      const linkHtml=e.link
+        ?`<a href="${e.link}" target="_blank" class="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+            광고 링크 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg></a>`
+        :`<span class="text-xs text-gray-300">링크 미등록</span>`;
+      html+=`<div class="flex items-center justify-between border border-gray-100 rounded-xl px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="chip ${cls}">${e.name}</span>
+          ${e.cost?`<span class="text-xs text-gray-500">${fmtWon(e.cost)}</span>`:''}
+        </div>
+        ${linkHtml}
+      </div>`;
+    }
+    html+='</div></div>';
+  }
+
+  // 트랙킹 데이터
+  if(track){
+    const rows=[
+      ['검색량 합계 (F열)',track.searchVolume||track.search_셀라딕스,'search'],
+      ['131앰플 검색량',track.search_131앰플,''],
+      ['크림 검색량',track.search_크림,''],
+      ['토너 검색량',track.search_토너,''],
+      ['쿠팡 131앰플',track.쿠팡_131앰플,'₩'],
+      ['쿠팡 크림',track.쿠팡_크림,'₩'],
+      ['쿠팡 토너',track.쿠팡_토너,'₩'],
+      ['자사몰 131앰플',track.자사몰_131앰플,'₩'],
+    ].filter(([,v])=>v>0);
+    if(rows.length){
+      html+=`<div>
+        <p class="text-xs font-semibold text-gray-400 uppercase mb-2">트랙킹 지표</p>
+        <div class="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
+          ${rows.map(([label,val,prefix],idx)=>{
+            const isSearch=prefix==='search';
+            const formatted=prefix==='₩'?fmtWon(val):val.toLocaleString('ko-KR');
+            const bg=isSearch?'bg-violet-50':'';
+            const valCls=isSearch?'text-violet-600':'text-gray-900';
+            return `<div class="flex items-center justify-between px-4 py-2.5 ${bg}">
+              <span class="text-sm ${isSearch?'font-semibold text-violet-700':'text-gray-600'}">${label}</span>
+              <span class="text-sm font-semibold ${valCls}">${formatted}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+  }
+
+  // 링크 추가 안내
+  html+=`<div class="bg-gray-50 rounded-xl p-3 text-xs text-gray-500">
+    💡 광고 링크를 추가하려면 <code class="bg-gray-200 px-1 rounded">dashboard.html</code> 상단
+    <code class="bg-gray-200 px-1 rounded">PPL_LINKS</code>에 이름과 URL을 입력하세요.
+  </div>`;
+
+  document.getElementById('modal-body').innerHTML=html;
+  document.getElementById('day-modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('day-modal').classList.add('hidden');
+}
+
+// ================================================================
+// TABS
+// ================================================================
+function switchTab(tab) {
+  document.getElementById('view-summary').classList.toggle('hidden', tab!=='summary');
+  document.getElementById('view-calendar').classList.toggle('hidden', tab!=='calendar');
+  document.getElementById('tab-summary').className=tab==='summary'?'tab-active px-5 py-2.5 text-sm':'tab-inactive px-5 py-2.5 text-sm';
+  document.getElementById('tab-calendar').className=tab==='calendar'?'tab-active px-5 py-2.5 text-sm':'tab-inactive px-5 py-2.5 text-sm';
+  if(tab==='calendar') renderCalendar();
+}
+
+// ================================================================
+// MOCK DATA
+// ================================================================
+function loadMock() {
+  document.getElementById('setup-guide').classList.remove('hidden');
+  STORE.salesData=[
+    {month:1,target:200000000,achieved:216778583,rate:108.4},
+    {month:2,target:250000000,achieved:262482609,rate:105.0},
+    {month:3,target:400000000,achieved:489129661,rate:122.3},
+    {month:4,target:700000000,achieved:743661824,rate:106.2},
+    {month:5,target:450000000,achieved:450869831,rate:100.2},
+    {month:6,target:1150000000,achieved:824990299,rate:71.7},
+  ];
+  // 일별 매출: 트랙킹 AC열 기준 예시값 (구글 시트 연결 시 실값으로 교체됨)
+  STORE.dailySales={};
+  // 목 PPL 이벤트 — 실제 세부일정 시트 텍스트 기준으로 작성
+  // 시트 연결 시 자동으로 교체됨
+  const mk=(m,d,name)=>({month:m,week:weekOfMonth(d),day:d,name,cost:0,type:pplType(name),link:PPL_LINKS[name]||''});
+  STORE.pplEvents=[
+    mk(6,1,'조이스키 PA'), mk(6,1,'이우곤 PA'), mk(6,1,'김다윤 PA'),
+    mk(6,2,'히로케미 PA'), mk(6,2,'송대익 PA (롱)'), mk(6,2,'쟁지 PA'),
+    mk(6,3,'레페리 샒의삶 일반 PPL(롱품)'), mk(6,3,'좌두 PA'), mk(6,3,'파파버즈 PPL (롱)'), mk(6,3,'조하니 PPL (롱)'),
+    mk(6,4,'만닥토이 PA'), mk(6,4,'베얄랭 PA (롱품)'), mk(6,4,'늘이농 PA'), mk(6,4,'코닥즈 PA'), mk(6,4,'임만열면 PPL(롱품)'),
+    mk(6,5,'이상한과자가게 PPL (숏품)'), mk(6,5,'주니루PA'),
+    mk(6,8,'기획전&오뜩 오픈 플진'), mk(6,8,'김신웅 PA'),
+    mk(6,9,'세아쎔 PPL(숏품)'),
+    mk(6,10,'플리즈 PA'), mk(6,10,'원진원 PA'),
+    mk(6,11,'동디 PA'),
+    mk(6,15,'슈히 PA'),
+    mk(6,17,'승헌씨 PPL (숏품)'), mk(6,17,'[레페리] 민카롱 기획 PPL(롱품)'),
+    mk(6,20,'SEOULITE PPL (롱품)'),
+    mk(6,22,'우조뱀 용병 PPL(롱품)'), mk(6,22,'어쩔수없는윤화 PPL(롱품)'), mk(6,22,'퉁장잔고 명원이 PA'), mk(6,22,'윤희 PA'), mk(6,22,'전핑공 PA'), mk(6,22,'모르는지 PPL (롱품)'),
+    mk(6,30,'하루의 하루 숏폼 PPL'),
+  ];
+  // 트랙킹 데이터: AC열(일별 매출) + F열(검색량) 예시
+  STORE.trackingData={
+    '6.1': {searchVolume:9200,dailySales:28000000,search_셀라딕스:9200},
+    '6.2': {searchVolume:8700,dailySales:32000000,search_셀라딕스:8700},
+    '6.3': {searchVolume:15400,dailySales:45000000,search_셀라딕스:15400}, // 샒의삶 업로드
+    '6.4': {searchVolume:12100,dailySales:19000000,search_셀라딕스:12100},
+    '6.5': {searchVolume:9800,dailySales:27000000,search_셀라딕스:9800},
+    '6.6': {searchVolume:7200,dailySales:15000000,search_셀라딕스:7200},
+    '6.7': {searchVolume:8500,dailySales:38000000,search_셀라딕스:8500},
+    '6.8': {searchVolume:9100,dailySales:22000000,search_셀라딕스:9100},
+    '6.9': {searchVolume:8300,dailySales:18000000,search_셀라딕스:8300},
+    '6.10':{searchVolume:14200,dailySales:29000000,search_셀라딕스:14200}, // 민카롱 업로드
+    '6.11':{searchVolume:11500,dailySales:35000000,search_셀라딕스:11500},
+    '6.12':{searchVolume:10800,dailySales:52000000,search_셀라딕스:10800},
+    '6.13':{searchVolume:9700,dailySales:31000000,search_셀라딕스:9700},
+    '6.14':{searchVolume:8900,dailySales:28000000,search_셀라딕스:8900},
+    '6.15':{searchVolume:9300,dailySales:31000000,search_셀라딕스:9300},
+    '6.16':{searchVolume:8100,dailySales:24000000,search_셀라딕스:8100},
+    '6.17':{searchVolume:13600,dailySales:19000000,search_셀라딕스:13600}, // 오늘도희다 업로드
+    '6.18':{searchVolume:10200,dailySales:27500000,search_셀라딕스:10200},
+  };
+  // dailySales를 trackingData AC열에서 파생
+  STORE.dailySales={};
+  Object.entries(STORE.trackingData).forEach(([k,v])=>{ STORE.dailySales[k]=v.dailySales; });
+  STORE.pplMemo=[
+    {label:'PPL',text:'131앰플 고성과 인플루언서 131토너로 재진행\n(쇼마, 늘이농)'},
+    {label:'레페리',text:'레페리 협업 PPL(1억 이상)\n-샒의삶(구독자 41.3만) → 6/3(수) 업로드\n-민카롱(구독자 12만) → 6/10(화) 업로드\n-달님 → 6/8 예정\n-오늘도희다 → 6/17 예정\n-하영필름·코코라일리·혜리미 진행 예정'},
+  ];
+}
+
+// ================================================================
+// INIT
+// ================================================================
+function setLoading(on) {
+  document.getElementById('refresh-icon').classList.toggle('spin', on);
+}
+
+function updateHeader() {
+  document.getElementById('month-badge').textContent=`${CURRENT_YEAR}년 ${CURRENT_MONTH}월 기준`;
+}
+
+async function init() {
+  setLoading(true);
+  document.getElementById('setup-guide').classList.add('hidden');
+  const memo=document.getElementById('ppl-memo-wrap');
+  if(memo){ memo.remove(); document.getElementById('ppl-table').classList.remove('hidden'); }
+  updateHeader(); calYear=CURRENT_YEAR; calMonth=CURRENT_MONTH;
+
+  try {
+    const [overText, schedText, trackText] = await Promise.allSettled([
+      fetchCSV(GID_OVERVIEW),
+      fetchCSV(GID_SCHEDULE),
+      fetchCSV(GID_TRACKING),
+    ]);
+
+    const overRows  = overText.status==='fulfilled' ? parseCSV(overText.value) : [];
+    const schedRows = schedText.status==='fulfilled' ? parseCSV(schedText.value) : [];
+    const trackRows = trackText.status==='fulfilled' ? parseCSV(trackText.value) : [];
+
+    const sd = parseSalesWide(overRows);
+    if (!sd) throw new Error('매출 데이터 없음');
+
+    STORE.salesData    = sd;
+    // 세부 일정(달력 그리드) → PPL 이벤트
+    STORE.pplEvents    = parsePPLSchedule(schedRows);
+    // 트랙킹(AC열=일별 총매출, F열=검색량)
+    STORE.trackingData = parseTracking(trackRows);
+    STORE.pplMemo      = parsePPLWide(overRows, CURRENT_MONTH);
+
+    // 일별 매출: 트랙킹 AC열 우선
+    const trackDs={};
+    Object.entries(STORE.trackingData).forEach(([k,v])=>{ if(v.dailySales) trackDs[k]=v.dailySales; });
+    STORE.dailySales = Object.assign({}, parseDailySales(schedRows), trackDs);
+
+  } catch(e) {
+    console.warn('[대시보드] 연결 실패:', e.message, '→ 미리보기');
+    loadMock();
+  }
+
+  // Always render
+  renderKPI(STORE.salesData);
+  renderChart(STORE.salesData);
+  if(STORE.pplMemo&&STORE.pplMemo.length) renderPPLMemo(STORE.pplMemo);
+  if(document.getElementById('view-calendar').classList.contains('hidden')===false) renderCalendar();
+
+  setLoading(false);
+}
+
+// ESC key closes modal
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+init();
+</script>
+</body>
+</html>
