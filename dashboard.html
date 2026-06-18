@@ -103,22 +103,19 @@
     </div>
   </div>
 
-  <!-- PPL MEMO -->
+  <!-- A-2: 세일 프로모션 & 액션 -->
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
     <div class="flex items-center justify-between mb-4">
-      <p class="text-sm font-semibold text-gray-600">이번 달 PPL 현황</p>
-      <span id="ppl-count" class="text-xs bg-gray-100 text-gray-500 font-medium px-2.5 py-1 rounded-full">—</span>
+      <p class="text-sm font-semibold text-gray-600">세일 프로모션 &amp; 액션</p>
+      <span class="text-xs text-gray-400">← 좌우 스크롤</span>
     </div>
-    <div id="ppl-container">
-      <table class="w-full text-sm" id="ppl-table">
-        <thead><tr class="border-b border-gray-100">
-          <th class="text-left text-xs text-gray-400 font-medium pb-3 pr-4 w-28">날짜</th>
-          <th class="text-left text-xs text-gray-400 font-medium pb-3 pr-4">인플루언서</th>
-          <th class="text-left text-xs text-gray-400 font-medium pb-3 w-20">형태</th>
-        </tr></thead>
-        <tbody id="ppl-tbody"><tr><td colspan="3" class="py-8 text-center text-gray-400 text-sm">로딩 중...</td></tr></tbody>
-      </table>
-    </div>
+    <div id="promo-container"><p class="text-sm text-gray-400 text-center py-8">로딩 중...</p></div>
+  </div>
+
+  <!-- A-3: 온라인/오프라인 매출 비중 -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
+    <p class="text-sm font-semibold text-gray-600 mb-5">온라인 / 오프라인 매출 비중</p>
+    <div style="position:relative; height:240px;"><canvas id="online-offline-chart"></canvas></div>
   </div>
 
   <!-- MONTHLY CHART -->
@@ -148,13 +145,13 @@
 
   <!-- Month nav -->
   <div class="flex items-center justify-between mb-4">
-    <button onclick="calNav(-1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+    <button id="cal-prev" onclick="calNav(-1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-opacity">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
       </svg>
     </button>
     <h2 id="cal-title" class="text-lg font-bold text-gray-900">2026년 6월</h2>
-    <button onclick="calNav(1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+    <button id="cal-next" onclick="calNav(1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-opacity">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
       </svg>
@@ -244,6 +241,17 @@ const PPL_TYPE_MAP = [
   { keywords: LEPEREE_NAMES, type: 'leperee' },
   { keywords: ['협력광고','올영 성과형','올리브영'], type: 'ad' },
 ];
+
+// 월별 세부 일정 GID 맵 (각 탭 URL의 gid= 값 입력)
+const SCHEDULE_MONTH_GIDS = {
+  // 1: 'XXXXXXXXX',  // 1월 세부 일정 탭 GID
+  // 2: 'XXXXXXXXX',  // 2월 세부 일정 탭 GID
+  // 3: 'XXXXXXXXX',  // 3월 세부 일정 탭 GID
+  // 4: 'XXXXXXXXX',  // 4월 세부 일정 탭 GID
+  // 5: 'XXXXXXXXX',  // 5월 세부 일정 탭 GID
+  6: GID_SCHEDULE,
+};
+const scheduleCache = {};  // 'YYYY-M' → [events]
 // ================================================================
 
 const NOW            = new Date();
@@ -251,8 +259,9 @@ const CURRENT_YEAR   = NOW.getFullYear();
 const CURRENT_MONTH  = NOW.getMonth() + 1;
 let   calYear        = CURRENT_YEAR;
 let   calMonth       = CURRENT_MONTH;
-let   salesChart     = null;
-let   STORE          = {};
+let   salesChart           = null;
+let   onlineOfflineChart   = null;
+let   STORE                = {};
 
 // ── CSV fetch ───────────────────────────────────────────────────
 async function fetchCSV(gid) {
@@ -471,6 +480,55 @@ function parseTracking(rows) {
   return map;
 }
 
+// ── Parse: 세일 프로모션 & 액션 (overview 시트) ───────────────────
+function parsePromoSection(rows) {
+  const findRow = label => rows.find(r =>
+    String(r[1]||'').trim() === label || String(r[0]||'').trim() === label
+  ) || null;
+  const promoRow  = findRow('세일 프로모션');
+  const actionRow = findRow('세일 액션');
+  const pogRow    = findRow('POG');
+  const result = [];
+  for (let m = 1; m <= CURRENT_MONTH; m++) {
+    const col = (m-1)*2+2;
+    result.push({
+      month:  m,
+      promo:  promoRow  ? String(promoRow[col] ||'').trim() : '',
+      action: actionRow ? String(actionRow[col]||'').trim() : '',
+      pog:    pogRow    ? String(pogRow[col]   ||'').trim() : '',
+    });
+  }
+  return result;
+}
+
+// ── Parse: 온라인/오프라인 매출 비중 (overview 시트) ──────────────
+function parseOnlineOffline(rows) {
+  const findRow = (...labels) => rows.find(r => {
+    const l = String(r[1]||r[0]||'').trim().toLowerCase();
+    return labels.some(lbl => l === lbl || l.includes(lbl));
+  });
+  const onlineRow     = findRow('online','온라인','온라인 매출');
+  const offlineRow    = findRow('offline','오프라인','오프라인 매출');
+  const onlinePctRow  = rows.find(r => { const l=String(r[1]||r[0]||'').trim(); return l.includes('온라인')&&l.includes('비중'); });
+  const offlinePctRow = rows.find(r => { const l=String(r[1]||r[0]||'').trim(); return l.includes('오프라인')&&l.includes('비중'); });
+  const result = [];
+  for (let m = 1; m <= CURRENT_MONTH; m++) {
+    const col    = (m-1)*2+2;
+    const online  = parseNum(onlineRow  ? onlineRow[col]  : 0);
+    const offline = parseNum(offlineRow ? offlineRow[col] : 0);
+    const total   = online + offline;
+    if (!total) continue;
+    const rawOn  = onlinePctRow  ? parseFloat(String(onlinePctRow[col] ||'').replace('%',''))  : 0;
+    const rawOff = offlinePctRow ? parseFloat(String(offlinePctRow[col]||'').replace('%','')) : 0;
+    result.push({
+      month: m, online, offline, total,
+      onPct:  rawOn  || Math.round(online /total*100),
+      offPct: rawOff || Math.round(offline/total*100),
+    });
+  }
+  return result;
+}
+
 // ── PPL wide text (overview sheet) ───────────────────────────────
 function parsePPLWide(rows, month) {
   const col=(month-1)*2+2;
@@ -548,6 +606,86 @@ function renderPPLMemo(items) {
     </div>`;
   }).join('');
   document.getElementById('ppl-container').appendChild(wrap);
+}
+
+function renderPromoSection(data) {
+  const container = document.getElementById('promo-container');
+  if (!container) return;
+  if (!data || !data.some(d => d.promo || d.action || d.pog)) {
+    container.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">시트에서 세일 프로모션/액션 데이터를 찾을 수 없습니다.<br><span class="text-xs">overview 탭에 "세일 프로모션" "세일 액션" "POG" 행이 있는지 확인해 주세요.</span></p>';
+    return;
+  }
+  const makeRow = (label, text, color) => !text ? '' :
+    `<div class="mt-2">
+      <p class="text-[9px] font-bold tracking-wide uppercase ${color} mb-0.5">${label}</p>
+      <p class="text-[11px] text-gray-700 leading-relaxed line-clamp-3 cursor-pointer select-none"
+         onclick="this.classList.toggle('line-clamp-3')" title="클릭하면 전체 보기">${text.replace(/\n/g,'<br>')}</p>
+    </div>`;
+  const cards = data.map(d => {
+    const isCur = d.month === CURRENT_MONTH;
+    return `<div class="flex-shrink-0 w-48 sm:w-56 rounded-xl p-3.5 ${isCur ? 'bg-indigo-50 border-2 border-indigo-300' : 'bg-gray-50 border border-gray-100'}">
+      <p class="text-sm ${isCur ? 'font-bold text-indigo-700' : 'font-semibold text-gray-600'}">${d.month}월${isCur ? ' <span class="text-xs font-normal text-indigo-400">◀ 현재</span>' : ''}</p>
+      ${makeRow('세일 프로모션', d.promo,  'text-blue-500')}
+      ${makeRow('세일 액션',    d.action, 'text-orange-500')}
+      ${makeRow('POG',          d.pog,    'text-emerald-600')}
+    </div>`;
+  });
+  container.innerHTML = `<div class="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">${cards.join('')}</div>`;
+  setTimeout(() => {
+    const cur = container.querySelector('.border-indigo-300');
+    if (cur) cur.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'center' });
+  }, 120);
+}
+
+function renderOnlineOfflineChart(data) {
+  const canvas = document.getElementById('online-offline-chart');
+  if (!canvas) return;
+  if (!data || !data.length) {
+    canvas.parentElement.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">시트에서 온라인/오프라인 매출 데이터를 찾을 수 없습니다.<br><span class="text-xs">overview 탭에 "online"/"offline" 또는 "온라인 매출"/"오프라인 매출" 행이 있는지 확인해 주세요.</span></p>';
+    return;
+  }
+  if (onlineOfflineChart) onlineOfflineChart.destroy();
+  const pctPlugin = {
+    id: 'ooLabels',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      [0,1].forEach(di => {
+        chart.getDatasetMeta(di).data.forEach((bar, i) => {
+          if (!data[i]) return;
+          const pct = di === 0 ? data[i].onPct : data[i].offPct;
+          if (!pct || pct < 9) return;
+          const midY = (bar.y + bar.base) / 2;
+          ctx.fillStyle = di === 0 ? '#1d4ed8' : '#c2410c';
+          ctx.font = `bold 10px 'Noto Sans KR',sans-serif`;
+          ctx.fillText(pct + '%', bar.x, midY);
+        });
+      });
+      ctx.restore();
+    }
+  };
+  onlineOfflineChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    plugins: [pctPlugin],
+    data: {
+      labels: data.map(d => d.month+'월'),
+      datasets: [
+        { label:'온라인',  data:data.map(d=>d.online),  backgroundColor:'rgba(59,130,246,0.8)',  borderRadius:[0,0,4,4], stack:'s' },
+        { label:'오프라인',data:data.map(d=>d.offline), backgroundColor:'rgba(249,115,22,0.8)', borderRadius:[4,4,0,0], stack:'s' },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ position:'top', align:'end', labels:{ font:{family:"'Noto Sans KR',sans-serif",size:12}, usePointStyle:true, pointStyleWidth:8, padding:16 }},
+        tooltip:{ callbacks:{ label:c=>{ const d=data[c.dataIndex]; return `  ${c.dataset.label}: ${fmtWon(c.parsed.y)} (${c.datasetIndex===0?d.onPct:d.offPct}%)`; }}, titleFont:{family:"'Noto Sans KR',sans-serif"}, bodyFont:{family:"'Noto Sans KR',sans-serif"} }
+      },
+      scales:{
+        x:{ stacked:true, grid:{display:false}, ticks:{font:{family:"'Noto Sans KR',sans-serif",size:12}} },
+        y:{ stacked:true, grid:{color:'rgba(0,0,0,0.04)'}, ticks:{font:{family:"'Noto Sans KR',sans-serif",size:11}, callback:v=>fmtWon(v)} }
+      }
+    }
+  });
 }
 
 // ================================================================
@@ -663,13 +801,52 @@ function renderCalendar() {
       eventsHtml;
     grid.appendChild(cell);
   }
+  updateNavButtons();
+}
+
+// ── 월별 세부 일정 비동기 로드 + 캐싱 ───────────────────────────
+async function loadScheduleForMonth(year, month) {
+  const key = `${year}-${month}`;
+  if (key in scheduleCache) return scheduleCache[key];
+  const gid = SCHEDULE_MONTH_GIDS[month];
+  if (!gid) { scheduleCache[key] = []; return []; }
+  try {
+    const csv = await fetchCSV(gid);
+    const rows = parseCSV(csv);
+    const events = parsePPLSchedule(rows);
+    scheduleCache[key] = events;
+    return events;
+  } catch(e) {
+    scheduleCache[key] = [];
+    return [];
+  }
+}
+
+function updateNavButtons() {
+  const prevBtn = document.getElementById('cal-prev');
+  const nextBtn = document.getElementById('cal-next');
+  const prevDis = calYear < 2026 || (calYear === 2026 && calMonth <= 1);
+  const nextDis = calYear > CURRENT_YEAR || (calYear === CURRENT_YEAR && calMonth >= CURRENT_MONTH);
+  if (prevBtn) { prevBtn.style.opacity = prevDis ? '0.25' : '1'; prevBtn.style.pointerEvents = prevDis ? 'none' : ''; }
+  if (nextBtn) { nextBtn.style.opacity = nextDis ? '0.25' : '1'; nextBtn.style.pointerEvents = nextDis ? 'none' : ''; }
 }
 
 function calNav(dir) {
-  calMonth+=dir;
-  if(calMonth>12){calMonth=1;calYear++;}
-  if(calMonth<1){calMonth=12;calYear--;}
-  renderCalendar();
+  let y = calYear, m = calMonth + dir;
+  if (m > 12) { y++; m = 1; }
+  if (m < 1)  { y--; m = 12; }
+  if (y < 2026 || (y === 2026 && m < 1)) return;
+  if (y > CURRENT_YEAR || (y === CURRENT_YEAR && m > CURRENT_MONTH)) return;
+  calYear = y; calMonth = m;
+  loadScheduleForMonth(calYear, calMonth).then(events => {
+    if (events.length) {
+      STORE.pplEvents = [
+        ...(STORE.pplEvents||[]).filter(e => e.month !== calMonth),
+        ...events
+      ];
+    }
+    renderCalendar();
+  });
 }
 
 // ================================================================
@@ -845,8 +1022,6 @@ function updateHeader() {
 async function init() {
   setLoading(true);
   document.getElementById('setup-guide').classList.add('hidden');
-  const memo=document.getElementById('ppl-memo-wrap');
-  if(memo){ memo.remove(); document.getElementById('ppl-table').classList.remove('hidden'); }
   updateHeader(); calYear=CURRENT_YEAR; calMonth=CURRENT_MONTH;
 
   // ── 3개 시트 병렬 fetch (각각 독립적으로 실패 허용) ──
@@ -871,6 +1046,8 @@ async function init() {
   const pplLive = parsePPLSchedule(schedRows);
   STORE.pplEvents = pplLive.length ? pplLive : MOCK_PPL;
   if (!pplLive.length) anyMock = true;
+  // 6월 데이터 캐싱 (B-5 캐시 전략)
+  scheduleCache[`${CURRENT_YEAR}-${CURRENT_MONTH}`] = STORE.pplEvents.filter(e => e.month === CURRENT_MONTH);
 
   // ── 트랙킹: F열=검색량, AC열=일별 총매출 ──
   STORE.trackingData = parseTracking(trackRows);
@@ -879,15 +1056,19 @@ async function init() {
   STORE.dailySales = trackDs;
   if (!Object.keys(trackDs).length) anyMock = true;
 
-  // ── PPL 메모 (overview 시트) ──
-  STORE.pplMemo = parsePPLWide(overRows, CURRENT_MONTH);
-
   if (anyMock) document.getElementById('setup-guide').classList.remove('hidden');
+
+  // ── 세일 프로모션 & 액션 (A-2) ──
+  STORE.promoData = parsePromoSection(overRows);
+  renderPromoSection(STORE.promoData);
+
+  // ── 온라인/오프라인 매출 비중 (A-3) ──
+  STORE.onlineOffline = parseOnlineOffline(overRows);
+  renderOnlineOfflineChart(STORE.onlineOffline);
 
   // Always render
   renderKPI(STORE.salesData);
   renderChart(STORE.salesData);
-  if(STORE.pplMemo&&STORE.pplMemo.length) renderPPLMemo(STORE.pplMemo);
   if(document.getElementById('view-calendar').classList.contains('hidden')===false) renderCalendar();
 
   setLoading(false);
