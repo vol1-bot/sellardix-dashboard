@@ -24,11 +24,18 @@
     .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px;
             font-size:11px; font-weight:500; cursor:pointer; transition:opacity 0.15s; white-space:nowrap; }
     .chip:hover { opacity:0.8; }
-    .chip-ppl    { background:#ede9fe; color:#5b21b6; }
-    .chip-leperee{ background:#fce7f3; color:#9d174d; }
-    .chip-pa     { background:#d1fae5; color:#065f46; }
-    .chip-ad     { background:#fef3c7; color:#92400e; }
-    .chip-other  { background:#f3f4f6; color:#374151; }
+    .chip-ppl      { background:#ede9fe; color:#5b21b6; }
+    .chip-ppl-long { background:#fde8e8; color:#b91c1c; }
+    .chip-ppl-short{ background:#fce7f3; color:#be185d; }
+    .chip-leperee  { background:#fce7f3; color:#9d174d; }
+    .chip-pa       { background:#fff3e0; color:#92400e; }
+    .chip-ad       { background:#f3e8ff; color:#6d28d9; }
+    .chip-campaign { background:#fefce8; color:#854d0e; }
+    .chip-crm      { background:#e0f2fe; color:#075985; }
+    .chip-promo    { background:#f0fdf4; color:#166534; font-weight:600; }
+    .chip-issue    { background:#fff7ed; color:#9a3412; }
+    .chip-content  { background:#ecfdf5; color:#065f46; }
+    .chip-other    { background:#f3f4f6; color:#374151; }
     ::-webkit-scrollbar { width:5px; height:5px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:#d1d5db; border-radius:3px; }
@@ -183,14 +190,18 @@
   </div>
 
   <!-- Legend -->
-  <div class="flex flex-wrap gap-3 mt-3 text-xs text-gray-500">
-    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-violet-200 inline-block"></span>PPL</span>
-    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-pink-200 inline-block"></span>레페리</span>
-    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-200 inline-block"></span>PA</span>
-    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-200 inline-block"></span>협력광고</span>
-    <span class="flex items-center gap-1.5"><span class="font-semibold text-emerald-600">초록</span> = 일별 매출 (AC열)</span>
-    <span class="flex items-center gap-1.5"><span class="font-semibold text-violet-400">검</span> = 검색량 (F열)</span>
-    <span class="ml-auto text-gray-400">날짜 클릭 → 상세 보기</span>
+  <div class="flex flex-wrap gap-2 mt-3 text-xs">
+    <span class="chip chip-ppl-long">PPL 롱폼</span>
+    <span class="chip chip-ppl-short">PPL 숏폼</span>
+    <span class="chip chip-leperee">레페리</span>
+    <span class="chip chip-pa">PA</span>
+    <span class="chip chip-ad">협력광고</span>
+    <span class="chip chip-crm">CRM</span>
+    <span class="chip chip-promo">프로모션</span>
+    <span class="chip chip-campaign">캠페인</span>
+    <span class="chip chip-issue">이슈</span>
+    <span class="chip chip-content">콘텐츠</span>
+    <span class="ml-auto text-gray-400 self-center">날짜 클릭 → 상세 | <span class="text-emerald-600 font-semibold">초록</span>=매출 <span class="text-violet-400 font-semibold">검</span>=검색량</span>
   </div>
 </div>
 
@@ -242,7 +253,17 @@ const PPL_TYPE_MAP = [
   { keywords: ['협력광고','올영 성과형','올리브영'], type: 'ad' },
 ];
 
-// 세부 일정 시트(GID_SCHEDULE) 하나에 1~6월 전체가 담겨 있음 → 별도 탭 분리 불필요
+// ▼ 월별 세부일정 탭 GID — 구글 시트 URL에서 &gid= 값 확인 후 입력
+//   방법: 시트에서 해당 월 탭 클릭 → 브라우저 URL의 gid=숫자 복사
+const SCHEDULE_MONTH_GIDS = {
+  // 1: '________',   // 1월 세부일정 탭 gid
+  // 2: '________',   // 2월 세부일정 탭 gid
+  // 3: '________',   // 3월 세부일정 탭 gid
+  // 4: '________',   // 4월 세부일정 탭 gid
+  // 5: '________',   // 5월 세부일정 탭 gid
+  6: GID_SCHEDULE,    // 6월 세부일정 탭 gid (기존)
+};
+const scheduleCache = {};  // 'YYYY-M' → [events]
 // ================================================================
 
 const NOW            = new Date();
@@ -304,33 +325,83 @@ function rateColors(r) {
 function daysInMonth(y,m) { return new Date(y,m,0).getDate(); }
 function weekOfMonth(d) { return Math.ceil(d/7); }
 
-function pplType(name) {
-  if (!name) return 'other';
-  const n = name.trim();
-  // PA 판단: 이름 끝이 " PA" 이거나 " PA (" 포함
-  if (/ PA$/.test(n) || / PA[\s\(（]/.test(n) || n.endsWith('PA')) return 'pa';
-  // 플친톡 / 올영픽 / 기획전 = 협력광고(ad)
-  if (n.includes('플친톡') || n.includes('올영픽') || n.includes('기획전') || n.includes('플진')) return 'ad';
-  // [레페리] 태그
-  if (n.startsWith('[레페리]') || n.includes('레페리')) return 'leperee';
-  for (const { keywords, type } of PPL_TYPE_MAP) {
-    if (keywords.some(k => n.includes(k))) return type;
+// ── 일정 항목 분류 (작업지시서 v0.4 기반) ───────────────────────
+function parseScheduleItem(text) {
+  const t = (text||'').trim();
+  // 레페리 SEO / 레페리
+  if (t.includes('[레페리SEO]') || t.startsWith('[레페리]') || t.startsWith('레페리 ')) {
+    const name = t.replace(/^\[레페리SEO\]\s*/,'').replace(/^\[레페리\]\s*/,'').replace(/^레페리\s+/,'')
+                  .replace(/\s*PPL\s*[\(（]?[롱숏]폼?[\)）]?\s*$/i,'').trim();
+    return { type:'leperee', displayName: name||t };
   }
-  return 'ppl';
+  // PPL 롱폼
+  if (/PPL\s*[\(（]?롱폼?[\)）]?/i.test(t) || /PPL\s*\(롱\)/i.test(t)) {
+    const name = t.replace(/\s*PPL\s*[\(（]?롱폼?[\)） ]?\s*$/i,'').trim();
+    return { type:'ppl-long', displayName: name||t };
+  }
+  // PPL 숏폼
+  if (/PPL\s*[\(（]?숏폼?[\)）]?/i.test(t) || /PPL\s*\(숏\)/i.test(t)) {
+    const name = t.replace(/\s*PPL\s*[\(（]?숏폼?[\)） ]?\s*$/i,'').trim();
+    return { type:'ppl-short', displayName: name||t };
+  }
+  // PA (Performance Assistant)
+  if (/\sPA$/.test(t) || t === 'PA' || /\sPA\s*[\(（]/.test(t) || t.endsWith(' PA')) {
+    const name = t.replace(/\s+PA(\s*[\(（][^)）]*[\)）])?$/,'').trim();
+    return { type:'pa', displayName: name||t };
+  }
+  // 협력광고 / 성과형광고
+  if (t.includes('협력광고') || t.includes('성과형광고') || t.includes('성과형 광고')) {
+    return { type:'ad', displayName: t };
+  }
+  // 인스타그램 / 핀드트래픽 / 캠페인
+  if (t.includes('인스타그램') || t.includes('핀드트래픽') || t.includes('캠페인')) {
+    return { type:'campaign', displayName: t };
+  }
+  // CRM (알림톡, 친구톡, 스마트푸시, 플진)
+  if (t.includes('알림톡') || t.includes('친구톡') || t.includes('스마트푸시') || t.includes('플진') || t.includes('올영픽')) {
+    return { type:'crm', displayName: t };
+  }
+  // 프로모션 공지 (세일인데일, 쏘핑, 정원P, 브랜드위크, 기획전 등)
+  if (t.includes('세일인데일') || t.includes('쏘핑') || t.includes('정원P') || t.includes('뷰라이브') ||
+      t.includes('브랜드위크') || t.includes('기획전') || t.includes('세일') && t.length < 10) {
+    return { type:'promo', displayName: t };
+  }
+  // 재고부족 / 이슈
+  if (t.includes('재고부족') || (t.includes('이슈') && !t.includes('PPL'))) {
+    return { type:'issue', displayName: t };
+  }
+  // 콘텐츠 발행 (상세페이지, 파이프라인, 업로드 등)
+  if (t.includes('상세페이지') || t.includes('파이프라인') || t.includes('데일리 제나') || t.includes('업로드')) {
+    return { type:'content', displayName: t };
+  }
+  // PPL 일반 (롱폼/숏폼 미기재)
+  if (t.includes('PPL')) {
+    const name = t.replace(/\s*PPL\s*[\(（][^)）]*[\)）]?\s*$/i,'').trim();
+    return { type:'ppl', displayName: name||t };
+  }
+  return { type:'other', displayName: t };
 }
+
 function chipClass(type) {
-  return { ppl:'chip-ppl', leperee:'chip-leperee', pa:'chip-pa', ad:'chip-ad', other:'chip-other' }[type]||'chip-other';
+  return {
+    'ppl-long':  'chip-ppl-long',
+    'ppl-short': 'chip-ppl-short',
+    'leperee':   'chip-leperee',
+    'pa':        'chip-pa',
+    'ad':        'chip-ad',
+    'campaign':  'chip-campaign',
+    'crm':       'chip-crm',
+    'promo':     'chip-promo',
+    'issue':     'chip-issue',
+    'content':   'chip-content',
+    'ppl':       'chip-ppl',
+  }[type] || 'chip-other';
 }
 function weekLabel(w) { return `${w}주차`; }
-// "레페리 샒의삶 일반 PPL(롱품)" → "샒의삶" 처럼 핵심 이름만 추출
-function extractName(raw) {
-  let n = raw.trim()
-    .replace(/^\[레페리\]\s*/,'')
-    .replace(/^레페리\s+/,'')
-    .replace(/\s+(기획|일반|숏폼|롱폼)?\s*PPL\s*[\(（]?(롱품?|숏품?)?[\)）]?\s*$/i,'')
-    .replace(/\s+PA\s*[\(（]?[롱숏]?품?[\)）]?\s*$/i,'')
-    .trim();
-  return n.length>5 ? n.slice(0,5)+'…' : n;
+function chipName(e) {
+  // 저장된 displayName 우선, 없으면 raw name에서 추출
+  const base = e.displayName || parseScheduleItem(e.name).displayName;
+  return base.length > 8 ? base.slice(0, 8) + '…' : base;
 }
 
 // ── Parse: 월별 매출 가로형 ──────────────────────────────────────
@@ -437,9 +508,10 @@ function parsePPLSchedule(rows) {
       if (!text) continue;
       // 중복 방지
       if (!events.find(e=>e.month===curMonth&&e.day===cd.day&&e.name===text)) {
+        const item = parseScheduleItem(text);
         events.push({
           month:curMonth, week:weekOfMonth(cd.day), day:cd.day,
-          name:text, cost:0, type:pplType(text), link:PPL_LINKS[text]||''
+          name:text, displayName:item.displayName, type:item.type, cost:0, link:PPL_LINKS[text]||''
         });
       }
     }
@@ -778,7 +850,7 @@ function renderCalendar() {
       eventsHtml='<div class="flex flex-wrap gap-0.5 mt-0.5">'+
         dayEvents.slice(0,3).map(e=>{
           const cls=chipClass(e.type);
-          return '<span class="chip '+cls+' text-[10px] px-1.5 py-0" onclick="event.stopPropagation();openDayModal('+year+','+month+','+day+','+sales+',null,'+w+')">'+extractName(e.name)+'</span>';
+          return '<span class="chip '+cls+' text-[10px] px-1.5 py-0" onclick="event.stopPropagation();openDayModal('+year+','+month+','+day+','+sales+',null,'+w+')">'+chipName(e)+'</span>';
         }).join('')+
         (dayEvents.length>3?'<span class="text-[10px] text-gray-400 ml-0.5">+'+( dayEvents.length-3)+'</span>':'')+
       '</div>';
@@ -808,6 +880,23 @@ function renderCalendar() {
   updateNavButtons();
 }
 
+async function loadScheduleForMonth(year, month) {
+  const key = `${year}-${month}`;
+  if (key in scheduleCache) return scheduleCache[key];
+  const gid = SCHEDULE_MONTH_GIDS[month];
+  if (!gid) { scheduleCache[key] = []; return []; }
+  try {
+    const csv = await fetchCSV(gid);
+    const rows = parseCSV(csv);
+    const events = parsePPLSchedule(rows);
+    scheduleCache[key] = events;
+    return events;
+  } catch(e) {
+    scheduleCache[key] = [];
+    return [];
+  }
+}
+
 function updateNavButtons() {
   const prevBtn = document.getElementById('cal-prev');
   const nextBtn = document.getElementById('cal-next');
@@ -824,7 +913,18 @@ function calNav(dir) {
   if (y < 2026 || (y === 2026 && m < 1)) return;
   if (y > CURRENT_YEAR || (y === CURRENT_YEAR && m > CURRENT_MONTH)) return;
   calYear = y; calMonth = m;
-  renderCalendar();
+  // 해당 월 이벤트가 없으면 GID 있을 경우 로드 시도
+  const hasEvents = (STORE.pplEvents||[]).some(e => e.month === calMonth);
+  if (!hasEvents && SCHEDULE_MONTH_GIDS[calMonth]) {
+    loadScheduleForMonth(calYear, calMonth).then(events => {
+      if (events.length) {
+        STORE.pplEvents = [...(STORE.pplEvents||[]).filter(e => e.month !== calMonth), ...events];
+      }
+      renderCalendar();
+    });
+  } else {
+    renderCalendar();
+  }
 }
 
 // ================================================================
@@ -941,7 +1041,7 @@ const MOCK_SALES=[
   {month:5,target:450000000,achieved:450869831,rate:100.2},
   {month:6,target:1150000000,achieved:824990299,rate:71.7},
 ];
-const _mk=(m,d,name)=>({month:m,week:weekOfMonth(d),day:d,name,cost:0,type:pplType(name),link:PPL_LINKS[name]||''});
+const _mk=(m,d,name)=>{const item=parseScheduleItem(name);return{month:m,week:weekOfMonth(d),day:d,name,displayName:item.displayName,cost:0,type:item.type,link:PPL_LINKS[name]||''};}
 const MOCK_PPL=[
   _mk(6,1,'조이스키 PA'),_mk(6,1,'이우곤 PA'),_mk(6,1,'김다윤 PA'),
   _mk(6,2,'히로케미 PA'),_mk(6,2,'송대익 PA (롱)'),_mk(6,2,'쟁지 PA'),
