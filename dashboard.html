@@ -238,9 +238,9 @@
 const PUB_BASE     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSepABFK0vAgCXz_YIuIIJHnI2uvWP4j9rgekTz9yIFOYc5g2AsWrMeuU8ElpiMf_pixWqbBMKYaN8u/pub?output=csv';
 const SHEET_ID     = '1fzbW13tJpdUe5EjA8w9SGFVOX74XmEhs9dwvXmM6yO8';
 const EXPORT_BASE  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-const GID_OVERVIEW = '0';
+const GID_OVERVIEW = '750135544';   // 셀라딕스 매출목표 (overview)
 const GID_TRACKING = '445294510';   // 트랙킹 시트 (E열=날짜, F열=검색량, AC열=일별 총매출)
-const GID_SCHEDULE = '750135544';   // 세부 일정 시트 (달력 그리드 형식 — 모든 월 포함)
+const GID_SCHEDULE = '0';           // 세부 일정 탭 (달력 그리드 형식 — 모든 월 포함)
 
 // PPL 광고 링크 설정 ─ 인플루언서 이름(시트 그대로): 'URL' 형식으로 추가
 const PPL_LINKS = {
@@ -1135,7 +1135,7 @@ async function init() {
   // ── 3개 시트 병렬 fetch (각각 독립적으로 실패 허용) ──
   const [overRes, schedRes, trackRes] = await Promise.allSettled([
     fetchCSV(GID_OVERVIEW),
-    fetchCSV(GID_SCHEDULE),
+    fetchScheduleCSV(GID_SCHEDULE),
     fetchCSV(GID_TRACKING),
   ]);
 
