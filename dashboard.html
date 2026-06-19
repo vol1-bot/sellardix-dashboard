@@ -6,6 +6,7 @@
   <title>셀라딕스 마케팅 대시보드</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     * { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
@@ -235,9 +236,11 @@
 // ✅ 설정 영역
 // ================================================================
 const PUB_BASE     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSepABFK0vAgCXz_YIuIIJHnI2uvWP4j9rgekTz9yIFOYc5g2AsWrMeuU8ElpiMf_pixWqbBMKYaN8u/pub?output=csv';
+const SHEET_ID     = '1fzbW13tJpdUe5EjA8w9SGFVOX74XmEhs9dwvXmM6yO8';
+const EXPORT_BASE  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 const GID_OVERVIEW = '0';
 const GID_TRACKING = '445294510';   // 트랙킹 시트 (E열=날짜, F열=검색량, AC열=일별 총매출)
-const GID_SCHEDULE = '750135544';   // 세부 일정 시트 (달력 그리드 형식)
+const GID_SCHEDULE = '750135544';   // 세부 일정 시트 (달력 그리드 형식 — 모든 월 포함)
 
 // PPL 광고 링크 설정 ─ 인플루언서 이름(시트 그대로): 'URL' 형식으로 추가
 const PPL_LINKS = {
@@ -253,15 +256,15 @@ const PPL_TYPE_MAP = [
   { keywords: ['협력광고','올영 성과형','올리브영'], type: 'ad' },
 ];
 
-// ▼ 월별 세부일정 탭 GID — 구글 시트 URL에서 &gid= 값 확인 후 입력
-//   방법: 시트에서 해당 월 탭 클릭 → 브라우저 URL의 gid=숫자 복사
+// ▼ 월별 세부일정 탭이 GID_SCHEDULE 하나에 전부 있으면 아래 주석 그대로 두면 됨.
+//   월별로 탭이 분리되어 있으면 각 탭 GID를 입력: 시트에서 탭 클릭 → URL의 gid= 숫자 복사
 const SCHEDULE_MONTH_GIDS = {
-  // 1: '________',   // 1월 세부일정 탭 gid
+  // 1: '________',   // 1월 세부일정 탭 gid (별도 탭인 경우만)
   // 2: '________',   // 2월 세부일정 탭 gid
   // 3: '________',   // 3월 세부일정 탭 gid
   // 4: '________',   // 4월 세부일정 탭 gid
   // 5: '________',   // 5월 세부일정 탭 gid
-  6: GID_SCHEDULE,    // 6월 세부일정 탭 gid (기존)
+  // 6: GID_SCHEDULE, // 6월이 별도 탭이면 주석 해제 (기본값은 GID_SCHEDULE와 동일)
 };
 const scheduleCache = {};  // 'YYYY-M' → [events]
 // ================================================================
@@ -282,20 +285,18 @@ async function fetchCSV(gid) {
   if (!res.ok) throw new Error(`HTTP ${res.status} gid=${gid}`);
   return res.text();
 }
+// 월별 세부일정 탭 전용 — /export URL 방식 (웹에 게시 불필요, gid만 있으면 됨)
+async function fetchScheduleCSV(gid) {
+  const url = `${EXPORT_BASE}&gid=${gid}`;
+  const res = await fetch(url, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} gid=${gid}`);
+  return res.text();
+}
 
-// ── CSV parser ──────────────────────────────────────────────────
+// ── CSV parser (PapaParse — 빈 셀 정확히 보존, skipEmptyLines:false 필수) ──
 function parseCSV(text) {
-  return text.trim().split(/\r?\n/).map(line => {
-    const cols = [];
-    let cur = '', inQ = false;
-    for (const ch of line) {
-      if (ch === '"') { inQ = !inQ; continue; }
-      if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; continue; }
-      cur += ch;
-    }
-    cols.push(cur.trim());
-    return cols;
-  });
+  const result = Papa.parse(text, { skipEmptyLines: false });
+  return result.data.map(row => row.map(c => (c == null ? '' : String(c))));
 }
 
 // ── Utilities ───────────────────────────────────────────────────
@@ -446,76 +447,103 @@ function parseDailySales(rows) {
 }
 
 // ── Parse: 세부 일정 달력 그리드 ─────────────────────────────────
-// 형식: 7컬럼(일~토) × N행, 날짜행 → 이벤트행 반복
+// 실제 시트 구조 (v0.6 분석 기반):
+//  col 0 (A열) = 주간 걸치는 프로모션/공지 (세일인데일, PA 기간 등)
+//  col 1 (B열) = 일요일 날짜/일정
+//  col 2 (C열) = 월요일 날짜/일정
+//  col 3 (D열) = 화요일 날짜/일정
+//  col 4 (E열) = 수요일 날짜/일정
+//  col 5 (F열) = 목요일 날짜/일정
+//  col 6 (G열) = 금요일 날짜/일정
+//  col 7 (H열) = 토요일 날짜/일정
 function parsePPLSchedule(rows) {
-  const events=[];
-  let curMonth=null, curYear=CURRENT_YEAR;
-  let colDays=[]; // [{day, ok(=belongs to curMonth)}] × 7
+  const events = [];
+  let curYear = CURRENT_YEAR, curMonth = null;
+  let weekDates = {}; // { colIndex(1~7): dateNumber }
+
+  console.log('[달력파서] 총 행수:', rows.length);
+  if (rows.length > 0) console.log('[달력파서] 1~5행:', rows.slice(0,5).map(r=>r.slice(0,5).join('|')));
 
   for (const row of rows) {
-    // 월 헤더 감지: "26년 06월", "2026년 6월" 등
-    const mMatch=row.join(' ').match(/(\d{2,4})년\s*(\d{1,2})월/);
+    // 월 헤더: 어느 열에서든 "26년 03월", "2026년 6월" 등
+    const mMatch = row.join(' ').match(/(\d{2,4})년\s*(\d{1,2})월/);
     if (mMatch) {
-      const y=parseInt(mMatch[1]);
-      curMonth=parseInt(mMatch[2]);
-      curYear=y<100?2000+y:y;
-      colDays=[];
+      const y = parseInt(mMatch[1]);
+      curMonth = parseInt(mMatch[2]);
+      curYear = y < 100 ? 2000 + y : y;
+      weekDates = {};
       continue;
     }
     if (!curMonth) continue;
 
-    // 요일 헤더 행 스킵 (일,월,화,수,목,금,토)
-    const DOW=['일','월','화','수','목','금','토'];
-    if (row.slice(0,7).filter(c=>DOW.includes(String(c||'').trim())).length>=3) continue;
+    // 요일 헤더 행 스킵: col 1~7에 일,월,화... 3개 이상
+    const DOW = ['일','월','화','수','목','금','토'];
+    if (row.slice(1, 8).filter(c => DOW.includes(String(c||'').trim())).length >= 3) continue;
 
-    // 날짜 행 감지: 첫 7컬럼 중 2개 이상이 정수 1-31
-    const maxDay=new Date(curYear,curMonth,0).getDate();
-    const nums=row.slice(0,7).map(c=>{const n=parseInt(String(c||'').trim());return(n>=1&&n<=31)?n:null;});
-    if (nums.filter(n=>n!==null).length>=2) {
-      const isFirstWeek = !colDays.length; // 월 헤더 직후 첫 날짜 행
-      if (isFirstWeek) {
-        // 첫 주: "1"이 등장하는 컬럼을 찾아 그 이전은 전달 날짜로 처리
-        // 예) [4월30, 4월31, 1, 2, 3, 4, 5] → "1" 이전 컬럼 = 전달
-        const startCol = nums.findIndex(n => n === 1);
-        let maxSeen = 0;
-        colDays = nums.map((d, col) => {
-          if (!d) return null;
-          if (startCol >= 0 && col < startCol) return {day:d, ok:false}; // 전달 날짜
-          if (d > maxDay) return {day:d, ok:false};
-          maxSeen = Math.max(maxSeen, d);
-          return {day:d, ok:true};
-        });
+    // 날짜 행 감지: col 1~7에서 정수 2개 이상
+    const maxDay = new Date(curYear, curMonth, 0).getDate();
+    const dateRow = {};
+    for (let col = 1; col <= 7; col++) {
+      const v = String(row[col] || '').trim();
+      const n = parseInt(v);
+      if (n >= 1 && n <= 31 && v === String(n)) dateRow[col] = n;
+    }
+    if (Object.keys(dateRow).length >= 2) {
+      const isFirst = Object.keys(weekDates).length === 0;
+      weekDates = {};
+      if (isFirst) {
+        // 첫 주: "1"이 등장하는 col 이전은 전달 날짜 → 제외
+        const startCol = Object.entries(dateRow).find(([,d]) => d === 1)?.[0];
+        for (const [col, day] of Object.entries(dateRow)) {
+          if (day > maxDay) continue;
+          if (startCol && parseInt(col) < parseInt(startCol)) continue;
+          weekDates[col] = day;
+        }
       } else {
-        // 이후 주: maxSeen>20이고 d<10이면 → 다음달 시작
-        let maxSeen=0;
-        colDays=nums.map(d=>{
-          if (!d) return null;
-          if (d>maxDay) return {day:d,ok:false};
-          if (maxSeen>20&&d<10) return {day:d,ok:false};
-          maxSeen=Math.max(maxSeen,d);
-          return {day:d,ok:true};
-        });
+        let maxSeen = 0;
+        const sorted = Object.entries(dateRow).sort((a,b) => parseInt(a[0])-parseInt(b[0]));
+        for (const [col, day] of sorted) {
+          if (day > maxDay) continue;
+          if (maxSeen > 20 && day < 10) continue; // 다음달 날짜
+          maxSeen = Math.max(maxSeen, day);
+          weekDates[col] = day;
+        }
       }
       continue;
     }
 
-    // 이벤트 행: 각 컬럼에서 텍스트 추출
-    if (!colDays.length) continue;
-    for (let col=0;col<Math.min(7,row.length);col++) {
-      const cd=colDays[col];
-      if (!cd||!cd.ok) continue;
-      const text=String(row[col]||'').trim();
+    if (!Object.keys(weekDates).length) continue;
+
+    // A열 (col 0): 주간 걸치는 프로모션 → 이번 주 모든 날짜에 등록
+    const promoText = String(row[0] || '').trim();
+    if (promoText) {
+      const item = parseScheduleItem(promoText);
+      for (const dateNum of Object.values(weekDates)) {
+        if (!events.find(e => e.month===curMonth && e.day===dateNum && e.name===promoText)) {
+          events.push({ month:curMonth, week:weekOfMonth(dateNum), day:dateNum,
+            name:promoText, displayName:item.displayName, type:item.type,
+            cost:0, link:PPL_LINKS[promoText]||'', isPromo:true });
+        }
+      }
+    }
+
+    // B~H열 (col 1~7): 각 날짜 개별 일정
+    for (let col = 1; col <= 7; col++) {
+      const text = String(row[col] || '').trim();
       if (!text) continue;
-      // 중복 방지
-      if (!events.find(e=>e.month===curMonth&&e.day===cd.day&&e.name===text)) {
+      const dateNum = weekDates[col];
+      if (!dateNum) continue;
+      if (!events.find(e => e.month===curMonth && e.day===dateNum && e.name===text)) {
         const item = parseScheduleItem(text);
-        events.push({
-          month:curMonth, week:weekOfMonth(cd.day), day:cd.day,
-          name:text, displayName:item.displayName, type:item.type, cost:0, link:PPL_LINKS[text]||''
-        });
+        events.push({ month:curMonth, week:weekOfMonth(dateNum), day:dateNum,
+          name:text, displayName:item.displayName, type:item.type,
+          cost:0, link:PPL_LINKS[text]||'', isPromo:false });
       }
     }
   }
+
+  console.log('[달력파서] 파싱 완료:', events.length, '건',
+    '| 월별:', events.reduce((a,e)=>{a[e.month]=(a[e.month]||0)+1;return a;},{}));
   return events;
 }
 
@@ -886,12 +914,14 @@ async function loadScheduleForMonth(year, month) {
   const gid = SCHEDULE_MONTH_GIDS[month];
   if (!gid) { scheduleCache[key] = []; return []; }
   try {
-    const csv = await fetchCSV(gid);
+    // /export URL 방식 — "웹에 게시" 없이 공유된 시트 어느 탭이든 gid만으로 접근
+    const csv = await fetchScheduleCSV(gid);
     const rows = parseCSV(csv);
     const events = parsePPLSchedule(rows);
-    scheduleCache[key] = events;
-    return events;
+    scheduleCache[key] = events.filter(e => e.month === month);
+    return scheduleCache[key];
   } catch(e) {
+    console.warn('[loadScheduleForMonth] fetch 실패 gid='+gid, e.message);
     scheduleCache[key] = [];
     return [];
   }
@@ -1122,6 +1152,7 @@ async function init() {
 
   // ── 세부 일정: PPL 달력 그리드 → 각 날짜에 인플루언서 이름 그대로 ──
   const pplLive = parsePPLSchedule(schedRows);
+  console.log('[init] 세부일정 이벤트:', pplLive.length, pplLive.length ? '✅ 실데이터' : '❌ 파싱실패→목업');
   STORE.pplEvents = pplLive.length ? pplLive : MOCK_PPL;
   if (!pplLive.length) anyMock = true;
 
