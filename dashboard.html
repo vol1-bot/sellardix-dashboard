@@ -134,9 +134,9 @@
     <div style="position:relative; height:240px;"><canvas id="online-offline-chart"></canvas></div>
   </div>
 
-  <!-- 월별 관계 비 & ROAS -->
+  <!-- 월별 광고비 & ROAS -->
   <div id="cost-roas-section" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
-    <p class="text-sm font-semibold text-gray-600 mb-5">월별 관계 비 &amp; ROAS</p>
+    <p class="text-sm font-semibold text-gray-600 mb-5">월별 광고비 &amp; ROAS</p>
     <div class="flex flex-col sm:flex-row gap-6">
       <div class="flex-1" style="position:relative; height:240px;"><canvas id="cost-chart"></canvas></div>
       <div class="flex-1" style="position:relative; height:240px;"><canvas id="roas-chart"></canvas></div>
@@ -622,21 +622,25 @@ function parseTracking(rows) {
       if (k && colMap[k] === undefined) colMap[k] = ci;
     });
   }
+  // 이름 목록에서 첫 매칭 인덱스, 숫자는 하드코딩 폴백 (헤더 못 찾을 때 사용)
   const gc = (...names) => {
-    for (const n of names) if (colMap[n] !== undefined) return colMap[n];
+    for (const n of names) {
+      if (typeof n === 'number') return n;
+      if (colMap[n] !== undefined) return colMap[n];
+    }
     return -1;
   };
 
   const ci = {
-    셀라딕스: gc('셀라딕스', '셀라딕스 합계'),
-    앰플131:  gc('셀라딕스 131앰플'),
-    자사몰:   gc('131앰플 자사몰', '자사몰 131앰플'),
-    관계비:   gc('131앰플 관계 비', '131앰플 관계비'),
-    협력:     gc('협력관계 비', '협력관계비'),
-    단품:     gc('131단품 매출'),
-    더길:     gc('더길 매출'),
-    기획세트: gc('기획세트 매출'),
-    합산매출: gc('131 합산 매출'),
+    셀라딕스: gc('셀라딕스', '셀라딕스 합계', 5),
+    앰플131:  gc('셀라딕스 131앰플', 6),
+    자사몰:   gc('131앰플 자사몰', '자사몰 131앰플', 12),
+    관계비:   gc('131앰플 관계 비', '131앰플 관계비', 13),
+    협력:     gc('협력관계 비', '협력관계비', 14),
+    단품:     gc('131단품 매출', 22),
+    더길:     gc('더길 매출', 23),
+    기획세트: gc('기획세트 매출', 24),
+    합산매출: gc('131 합산 매출', 25),
   };
 
   for (const r of rows) {
@@ -929,7 +933,7 @@ function renderOnlineOfflineChart(data) {
   });
 }
 
-// ── RENDER: 월별 관계 비 & ROAS 차트 ──────────────────────────────
+// ── RENDER: 월별 광고비 & ROAS 차트 ──────────────────────────────
 function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
   const section = document.getElementById('cost-roas-section');
   const months = [];
@@ -951,7 +955,7 @@ function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
   const labels = months.map(d => d.m + '월');
   const kFont = { family:"'Noto Sans KR',sans-serif", size:11 };
 
-  // 관계비 누적 막대 차트
+  // 광고비 누적 막대 차트
   const costCtx = document.getElementById('cost-chart')?.getContext('2d');
   if (costCtx) {
     if (costChart) costChart.destroy();
@@ -963,7 +967,7 @@ function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
           { label:'바이럴 비용',
             data: months.map(d => d.viral),
             backgroundColor:'#5C6BC0', borderRadius:[4,4,0,0], stack:'s' },
-          { label:'협력관계비',
+          { label:'협력광고비',
             data: months.map(d => d.collab),
             backgroundColor:'#9575CD', borderRadius:[0,0,0,0], stack:'s' },
           { label:'오채비용',
@@ -1331,9 +1335,9 @@ function openDayModal(year, month, day, sales, events, week) {
       ${makeGrp('자사몰 매출',[
         ['131앰플', track.자사몰_131앰플, true],
       ])}
-      ${makeGrp('메타 관계 비',[
-        ['131앰플 관계 비', track.메타_131앰플관계비, true],
-        ['협력관계 비',     track.협력관계비,          true],
+      ${makeGrp('메타 광고비',[
+        ['131앰플 광고비', track.메타_131앰플관계비, true],
+        ['협력광고비',     track.협력관계비,          true],
       ])}
       ${makeGrp('131 합산 매출',[
         ['131단품 매출',  track.sales131_단품,     true],
@@ -1602,7 +1606,7 @@ async function init() {
   STORE.onlineOffline = parseOnlineOffline(overRows);
   renderOnlineOfflineChart(STORE.onlineOffline);
 
-  // ── 관계비 & ROAS 차트 (A-4) ──
+  // ── 광고비 & ROAS 차트 (A-4) ──
   const viralCosts   = parseViralCosts(viralRows);
   const collabCosts  = parseCollabCosts(STORE.trackingData);
   const offlineCosts = parseOfflineCosts(offlineRows);
