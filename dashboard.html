@@ -242,16 +242,7 @@ const PPL_TYPE_MAP = [
   { keywords: ['협력광고','올영 성과형','올리브영'], type: 'ad' },
 ];
 
-// 월별 세부 일정 GID 맵 (각 탭 URL의 gid= 값 입력)
-const SCHEDULE_MONTH_GIDS = {
-  // 1: 'XXXXXXXXX',  // 1월 세부 일정 탭 GID
-  // 2: 'XXXXXXXXX',  // 2월 세부 일정 탭 GID
-  // 3: 'XXXXXXXXX',  // 3월 세부 일정 탭 GID
-  // 4: 'XXXXXXXXX',  // 4월 세부 일정 탭 GID
-  // 5: 'XXXXXXXXX',  // 5월 세부 일정 탭 GID
-  6: GID_SCHEDULE,
-};
-const scheduleCache = {};  // 'YYYY-M' → [events]
+// 세부 일정 시트(GID_SCHEDULE) 하나에 1~6월 전체가 담겨 있음 → 별도 탭 분리 불필요
 // ================================================================
 
 const NOW            = new Date();
@@ -804,24 +795,6 @@ function renderCalendar() {
   updateNavButtons();
 }
 
-// ── 월별 세부 일정 비동기 로드 + 캐싱 ───────────────────────────
-async function loadScheduleForMonth(year, month) {
-  const key = `${year}-${month}`;
-  if (key in scheduleCache) return scheduleCache[key];
-  const gid = SCHEDULE_MONTH_GIDS[month];
-  if (!gid) { scheduleCache[key] = []; return []; }
-  try {
-    const csv = await fetchCSV(gid);
-    const rows = parseCSV(csv);
-    const events = parsePPLSchedule(rows);
-    scheduleCache[key] = events;
-    return events;
-  } catch(e) {
-    scheduleCache[key] = [];
-    return [];
-  }
-}
-
 function updateNavButtons() {
   const prevBtn = document.getElementById('cal-prev');
   const nextBtn = document.getElementById('cal-next');
@@ -838,15 +811,7 @@ function calNav(dir) {
   if (y < 2026 || (y === 2026 && m < 1)) return;
   if (y > CURRENT_YEAR || (y === CURRENT_YEAR && m > CURRENT_MONTH)) return;
   calYear = y; calMonth = m;
-  loadScheduleForMonth(calYear, calMonth).then(events => {
-    if (events.length) {
-      STORE.pplEvents = [
-        ...(STORE.pplEvents||[]).filter(e => e.month !== calMonth),
-        ...events
-      ];
-    }
-    renderCalendar();
-  });
+  renderCalendar();
 }
 
 // ================================================================
@@ -1046,8 +1011,6 @@ async function init() {
   const pplLive = parsePPLSchedule(schedRows);
   STORE.pplEvents = pplLive.length ? pplLive : MOCK_PPL;
   if (!pplLive.length) anyMock = true;
-  // 6월 데이터 캐싱 (B-5 캐시 전략)
-  scheduleCache[`${CURRENT_YEAR}-${CURRENT_MONTH}`] = STORE.pplEvents.filter(e => e.month === CURRENT_MONTH);
 
   // ── 트랙킹: F열=검색량, AC열=일별 총매출 ──
   STORE.trackingData = parseTracking(trackRows);
