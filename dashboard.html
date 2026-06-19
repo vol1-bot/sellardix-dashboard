@@ -611,39 +611,50 @@ function parseDateKey(raw) {
 }
 
 function parseTracking(rows) {
-  const map={};
+  const map = {};
   if (!rows.length) return map;
+
+  // 헤더 행(첫 5행)에서 컬럼명 → 인덱스 맵 구축 (시트 구조 변경에 강건)
+  const colMap = {};
+  for (let ri = 0; ri < 5; ri++) {
+    (rows[ri] || []).forEach((cell, ci) => {
+      const k = (cell || '').trim();
+      if (k && colMap[k] === undefined) colMap[k] = ci;
+    });
+  }
+  const gc = (...names) => {
+    for (const n of names) if (colMap[n] !== undefined) return colMap[n];
+    return -1;
+  };
+
+  const ci = {
+    셀라딕스: gc('셀라딕스', '셀라딕스 합계'),
+    앰플131:  gc('셀라딕스 131앰플'),
+    자사몰:   gc('131앰플 자사몰', '자사몰 131앰플'),
+    관계비:   gc('131앰플 관계 비', '131앰플 관계비'),
+    협력:     gc('협력관계 비', '협력관계비'),
+    단품:     gc('131단품 매출'),
+    더길:     gc('더길 매출'),
+    기획세트: gc('기획세트 매출'),
+    합산매출: gc('131 합산 매출'),
+  };
+
   for (const r of rows) {
     // E열(4) 우선, A열(0) 차선
     const key = parseDateKey(r[4]) || parseDateKey(r[0]);
     if (!key) continue;
-    map[key]={
-      // 검색량 (F-I)
-      searchVolume:    parseNum(r[5])||0,
-      search_셀라딕스: parseNum(r[5])||0,
-      search_131앰플:  parseNum(r[6])||0,
-      search_크림:     parseNum(r[7])||0,
-      search_토너:     parseNum(r[8])||0,
-      // 쿠팡 매출 (J-L)
-      쿠팡_131앰플:    parseNum(r[9])||0,
-      쿠팡_하이크림:   parseNum(r[10])||0,
-      쿠팡_하이토너:   parseNum(r[11])||0,
-      // 자사몰 매출 (M, P, Q)
-      자사몰_131앰플:  parseNum(r[12])||0,
-      자사몰_하이크림: parseNum(r[15])||0,
-      자사몰_하이토너: parseNum(r[16])||0,
-      // 메타 관계비 (N, O)
-      메타_131앰플관계비: parseNum(r[13])||0,
-      협력관계비:         parseNum(r[14])||0,
-      // 검색관계 (R-W)
-      검색관계_131앰플:   parseNum(r[17])||0,
-      검색관계_131방문수: parseNum(r[18])||0,
-      검색관계_토너:      parseNum(r[19])||0,
-      검색관계_토너방문수:parseNum(r[20])||0,
-      검색관계_크림:      parseNum(r[21])||0,
-      검색관계_크림방문수:parseNum(r[22])||0,
-      // 일별 총 매출
-      dailySales:      parseNum(r[28])||0,
+    const pn = i => i >= 0 ? (parseNum(r[i]) || 0) : 0;
+    map[key] = {
+      search_셀라딕스:    pn(ci.셀라딕스),
+      search_131앰플:     pn(ci.앰플131),
+      자사몰_131앰플:     pn(ci.자사몰),
+      메타_131앰플관계비: pn(ci.관계비),
+      협력관계비:         pn(ci.협력),
+      sales131_단품:      pn(ci.단품),
+      sales131_더길:      pn(ci.더길),
+      sales131_기획세트:  pn(ci.기획세트),
+      sales131_합산:      pn(ci.합산매출),
+      dailySales:         pn(ci.합산매출) || pn(28),
     };
   }
   return map;
@@ -1303,41 +1314,32 @@ function openDayModal(year, month, day, sales, events, week) {
       </div>`;
     };
     const makeGrp=(title,rows)=>{
-      const body=rows.map(([l,v,w])=>makeRow(l,v,w)).join('');
+      // 모든 항목이 '—'이면 섹션 전체 숨김
+      const rendered=rows.map(([l,v,w])=>makeRow(l,v,w));
+      if(rendered.every(r=>r.includes('text-gray-300'))) return '';
       return `<div>
         <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1 mb-1">${title}</p>
-        <div class="border border-gray-100 rounded-xl overflow-hidden mb-3">${body}</div>
+        <div class="border border-gray-100 rounded-xl overflow-hidden mb-3">${rendered.join('')}</div>
       </div>`;
     };
     html+=`<div>
       <p class="text-xs font-semibold text-gray-400 uppercase mb-2">트랙킹 지표</p>
       ${makeGrp('검색량',[
-        ['셀라딕스 합계 (F열)',track.search_셀라딕스,false],
-        ['131앰플',           track.search_131앰플,  false],
-        ['크림',               track.search_크림,    false],
-        ['토너',               track.search_토너,    false],
-      ])}
-      ${makeGrp('쿠팡 매출',[
-        ['131앰플 쿠팡순',  track.쿠팡_131앰플,  true],
-        ['하이크림 쿠팡순', track.쿠팡_하이크림, true],
-        ['하이토너 쿠팡순', track.쿠팡_하이토너, true],
+        ['셀라딕스 합계',    track.search_셀라딕스, false],
+        ['셀라딕스 131앰플', track.search_131앰플,  false],
       ])}
       ${makeGrp('자사몰 매출',[
-        ['131앰플',   track.자사몰_131앰플,  true],
-        ['하이크림',  track.자사몰_하이크림, true],
-        ['하이토너',  track.자사몰_하이토너, true],
+        ['131앰플', track.자사몰_131앰플, true],
       ])}
-      ${makeGrp('메타 관계비',[
-        ['131앰플 관계비', track.메타_131앰플관계비, true],
-        ['협력관계비',     track.협력관계비,          true],
+      ${makeGrp('메타 관계 비',[
+        ['131앰플 관계 비', track.메타_131앰플관계비, true],
+        ['협력관계 비',     track.협력관계비,          true],
       ])}
-      ${makeGrp('검색관계',[
-        ['131앰플 관계비',    track.검색관계_131앰플,    true],
-        ['→ 방문수',          track.검색관계_131방문수,  false],
-        ['토너 관계비',       track.검색관계_토너,       true],
-        ['→ 방문수',          track.검색관계_토너방문수, false],
-        ['크림 관계비',       track.검색관계_크림,       true],
-        ['→ 방문수',          track.검색관계_크림방문수, false],
+      ${makeGrp('131 합산 매출',[
+        ['131단품 매출',  track.sales131_단품,     true],
+        ['더길 매출',     track.sales131_더길,     true],
+        ['기획세트 매출', track.sales131_기획세트, true],
+        ['131 합산',     track.sales131_합산,     true],
       ])}
     </div>`;
   }
