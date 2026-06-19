@@ -119,25 +119,13 @@
     </div>
   </div>
 
-  <!-- A-2: 재시 프로모션 & POG -->
+  <!-- A-2: 프로모션 & POG -->
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
     <div class="flex items-center justify-between mb-4">
-      <p class="text-sm font-semibold text-gray-600">재시 프로모션 &amp; POG</p>
+      <p class="text-sm font-semibold text-gray-600">프로모션 &amp; POG</p>
       <span class="text-xs text-gray-400">← 좌우 스크롤</span>
     </div>
     <div id="promo-container"><p class="text-sm text-gray-400 text-center py-8">로딩 중...</p></div>
-  </div>
-
-  <!-- 마케팅 액션 상세 패널 (월 카드 클릭 시 표시) -->
-  <div id="mkt-action-panel" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 fade-in">
-    <div class="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
-      <button onclick="closeMktAction()" class="text-gray-400 hover:text-gray-600 flex items-center gap-1 text-sm">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-        다로
-      </button>
-      <h2 id="mkt-action-title" class="text-sm font-semibold text-gray-700 flex-1 text-center"></h2>
-    </div>
-    <div id="mkt-action-body" class="px-6 py-5 space-y-5 overflow-y-auto max-h-[60vh]"></div>
   </div>
 
   <!-- A-3: 온라인/오프라인 매출 비중 -->
@@ -146,9 +134,9 @@
     <div style="position:relative; height:240px;"><canvas id="online-offline-chart"></canvas></div>
   </div>
 
-  <!-- 월별 관계비 & ROAS -->
+  <!-- 월별 관계 비 & ROAS -->
   <div id="cost-roas-section" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 p-6 fade-in">
-    <p class="text-sm font-semibold text-gray-600 mb-5">월별 관계비 &amp; ROAS</p>
+    <p class="text-sm font-semibold text-gray-600 mb-5">월별 관계 비 &amp; ROAS</p>
     <div class="flex flex-col sm:flex-row gap-6">
       <div class="flex-1" style="position:relative; height:240px;"><canvas id="cost-chart"></canvas></div>
       <div class="flex-1" style="position:relative; height:240px;"><canvas id="roas-chart"></canvas></div>
@@ -867,7 +855,7 @@ function renderPromoSection(data) {
     return `<div class="flex-shrink-0 w-48 sm:w-56 rounded-xl p-3.5 cursor-pointer hover:shadow-md transition-shadow ${isCur ? 'bg-indigo-50 border-2 border-indigo-300' : 'bg-gray-50 border border-gray-100'}"
       onclick="openMktAction(${d.month})">
       <p class="text-sm ${isCur ? 'font-bold text-indigo-700' : 'font-semibold text-gray-600'}">${d.month}월${isCur ? ' <span class="text-xs font-normal text-indigo-400">◀ 현재</span>' : ''}</p>
-      ${makeRow('재시 프로모션', d.promo,  'text-blue-500')}
+      ${makeRow('프로모션', d.promo,  'text-blue-500')}
       ${makeRow('재시 액션',    d.action, 'text-orange-500')}
       ${makeRow('POG',          d.pog,    'text-emerald-600')}
     </div>`;
@@ -930,7 +918,7 @@ function renderOnlineOfflineChart(data) {
   });
 }
 
-// ── RENDER: 월별 관계비 & ROAS 차트 ──────────────────────────────
+// ── RENDER: 월별 관계 비 & ROAS 차트 ──────────────────────────────
 function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
   const section = document.getElementById('cost-roas-section');
   const months = [];
@@ -938,12 +926,11 @@ function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
     const viral   = viralCosts[m]   || 0;
     const collab  = collabCosts[m]  || 0;
     const offline = offlineCosts[m] || 0;
-    const marketing = viral + collab;
-    const total = marketing + offline;
+    const total = viral + collab + offline;
     const salesRow = sd ? sd.find(d => d.month === m) : null;
     const achieved = salesRow ? salesRow.achieved : 0;
     const roas = total > 0 ? Math.round(achieved / total * 100) : null;
-    months.push({ m, marketing, offline, total, achieved, roas });
+    months.push({ m, viral, collab, offline, total, achieved, roas });
   }
 
   const hasData = months.some(d => d.total > 0);
@@ -962,19 +949,25 @@ function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
       data: {
         labels,
         datasets: [
-          { label:'마케팅비(바이럴+협력)',
-            data: months.map(d => d.marketing),
-            backgroundColor:'rgba(99,102,241,0.75)', borderRadius:[4,4,0,0], stack:'s' },
+          { label:'바이럴 비용',
+            data: months.map(d => d.viral),
+            backgroundColor:'#5C6BC0', borderRadius:[4,4,0,0], stack:'s' },
+          { label:'협력관계비',
+            data: months.map(d => d.collab),
+            backgroundColor:'#9575CD', borderRadius:[0,0,0,0], stack:'s' },
           { label:'오채비용',
             data: months.map(d => d.offline),
-            backgroundColor:'rgba(249,115,22,0.75)', borderRadius:[0,0,4,4], stack:'s' },
+            backgroundColor:'#FF8A65', borderRadius:[0,0,4,4], stack:'s' },
         ]
       },
       options: {
         responsive:true, maintainAspectRatio:false,
         plugins:{
           legend:{ position:'top', align:'end', labels:{ font:kFont, usePointStyle:true, pointStyleWidth:8, padding:12 }},
-          tooltip:{ callbacks:{ label:c=>'  '+c.dataset.label+': '+fmtWon(c.parsed.y) }, titleFont:kFont, bodyFont:kFont }
+          tooltip:{ callbacks:{
+            label:c=>'  '+c.dataset.label+': '+fmtWon(c.parsed.y),
+            afterBody:items=>{ if(!items.length)return[]; const t=months[items[0].dataIndex].total; return['  ─────────','  합계: '+fmtWon(t)]; }
+          }, titleFont:kFont, bodyFont:kFont }
         },
         scales:{
           x:{ stacked:true, grid:{display:false}, ticks:{font:kFont} },
@@ -1403,7 +1396,7 @@ function closeModal() {
 }
 
 // ================================================================
-// 마케팅 액션 상세 패널
+// 마케팅 액션 모달
 // ================================================================
 function openMktAction(month) {
   const data = STORE.marketingActions;
@@ -1430,11 +1423,14 @@ function openMktAction(month) {
     </div>`;
   }).join('') || '<p class="text-sm text-gray-400 text-center py-6">이번 달 마케팅 액션 데이터 없음</p>';
 
-  document.getElementById('mkt-action-panel').classList.remove('hidden');
-  document.getElementById('mkt-action-panel').scrollIntoView({ behavior:'smooth', block:'start' });
+  document.getElementById('mkt-modal-overlay').style.display = 'block';
+  document.getElementById('mkt-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
 }
 function closeMktAction() {
-  document.getElementById('mkt-action-panel').classList.add('hidden');
+  document.getElementById('mkt-modal-overlay').style.display = 'none';
+  document.getElementById('mkt-modal').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // ================================================================
@@ -1622,9 +1618,21 @@ async function init() {
 }
 
 // ESC key closes modal
-document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') { closeModal(); closeMktAction(); } });
 
 init();
 </script>
+
+<!-- 마케팅 액션 전체화면 모달 -->
+<div id="mkt-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;" onclick="closeMktAction()"></div>
+<div id="mkt-modal" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:600px;max-height:80vh;overflow-y:auto;z-index:1001;border-radius:1rem;" class="bg-white shadow-xl modal-enter">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white" style="border-radius:1rem 1rem 0 0;">
+    <h2 id="mkt-action-title" class="text-sm font-semibold text-gray-700"></h2>
+    <button onclick="closeMktAction()" class="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div id="mkt-action-body" class="px-6 py-5 space-y-5"></div>
+</div>
 </body>
 </html>
