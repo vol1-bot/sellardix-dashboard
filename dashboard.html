@@ -234,7 +234,7 @@ const PPL_LINKS = {
 };
 
 // 레페리 소속 인플루언서 목록 (이름이 포함되면 leperee 타입)
-const LEPEREE_NAMES = ['샒의삶','민카롱','달님','혜리미','하영필름','오늘도희다','코코라일리','민가든','데일리제나','헤이즐','재리','털난새우','승헌씨','민카롱'];
+const LEPEREE_NAMES = ['샒의삶','민카롱','달님','혜리미','하영필름','오늘도희다','코코라일리','민가든','데일리제나','헤이즐','재리','털난새우','승헌쓰'];
 
 // PPL 항목 타입 분류
 const PPL_TYPE_MAP = [
@@ -401,17 +401,30 @@ function parsePPLSchedule(rows) {
     const maxDay=new Date(curYear,curMonth,0).getDate();
     const nums=row.slice(0,7).map(c=>{const n=parseInt(String(c||'').trim());return(n>=1&&n<=31)?n:null;});
     if (nums.filter(n=>n!==null).length>=2) {
-      // 이번 달 날짜 판별:
-      //   d > maxDay → 전달 잔여 (false)
-      //   maxSeen>20이고 d<10이면 → 다음달 시작 (false)
-      let maxSeen=0;
-      colDays=nums.map(d=>{
-        if (!d) return null;
-        if (d>maxDay) return {day:d,ok:false};          // 전달 날짜
-        if (maxSeen>20&&d<10) return {day:d,ok:false};  // 다음달 날짜
-        maxSeen=Math.max(maxSeen,d);
-        return {day:d,ok:true};
-      });
+      const isFirstWeek = !colDays.length; // 월 헤더 직후 첫 날짜 행
+      if (isFirstWeek) {
+        // 첫 주: "1"이 등장하는 컬럼을 찾아 그 이전은 전달 날짜로 처리
+        // 예) [4월30, 4월31, 1, 2, 3, 4, 5] → "1" 이전 컬럼 = 전달
+        const startCol = nums.findIndex(n => n === 1);
+        let maxSeen = 0;
+        colDays = nums.map((d, col) => {
+          if (!d) return null;
+          if (startCol >= 0 && col < startCol) return {day:d, ok:false}; // 전달 날짜
+          if (d > maxDay) return {day:d, ok:false};
+          maxSeen = Math.max(maxSeen, d);
+          return {day:d, ok:true};
+        });
+      } else {
+        // 이후 주: maxSeen>20이고 d<10이면 → 다음달 시작
+        let maxSeen=0;
+        colDays=nums.map(d=>{
+          if (!d) return null;
+          if (d>maxDay) return {day:d,ok:false};
+          if (maxSeen>20&&d<10) return {day:d,ok:false};
+          maxSeen=Math.max(maxSeen,d);
+          return {day:d,ok:true};
+        });
+      }
       continue;
     }
 
