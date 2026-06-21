@@ -78,7 +78,7 @@
     <button onclick="switchTab('calendar')" id="tab-calendar"
       class="tab-inactive px-5 py-2.5 text-sm transition-colors">📅 캘린더</button>
     <button onclick="openCryModal()" id="cry-tab"
-      class="tab-inactive px-5 py-2.5 text-sm transition-colors">😭 울고 싶어 눌러보기</button>
+      class="tab-inactive px-5 py-2.5 text-sm transition-colors">😭 울고 싶을 때 누르기</button>
   </div>
 </header>
 
@@ -261,7 +261,7 @@ const GID_OVERVIEW = '750135544';   // 셀라딕스 매출목표 (overview)
 const GID_TRACKING = '445294510';   // 트랙킹 시트 (E열=날짜, F열=검색량, AC열=일별 총매출)
 const GID_SCHEDULE = '0';           // 세부 일정 탭 (달력 그리드 형식 — 모든 월 포함)
 const GID_VIRAL    = '640260915';   // 바이럴 비용 히스토리 아카이빙
-const GID_OFFLINE  = '261992756';   // 오채 비용 집계
+const GID_OFFLINE  = '261992756';   // 옾채 비용 집계
 
 // PPL 광고 링크 설정 ─ 인플루언서 이름(시트 그대로): 'URL' 형식으로 추가
 const PPL_LINKS = {
@@ -640,7 +640,7 @@ function parseTracking(rows) {
     관계비:   gc('131앰플 관계 비', '131앰플 관계비', 13),
     협력:     gc('협력관계 비', '협력관계비', 14),
     단품:     gc('131단품 매출', 22),
-    더길:     gc('더길 매출', 23),
+    드길:     gc('드길 매출', 23),
     기획세트: gc('기획세트 매출', 24),
     합산매출: gc('131 합산 매출', 25),
   };
@@ -657,7 +657,7 @@ function parseTracking(rows) {
       메타_131앰플관계비: pn(ci.관계비),
       협력관계비:         pn(ci.협력),
       sales131_단품:      pn(ci.단품),
-      sales131_더길:      pn(ci.더길),
+      sales131_드길:      pn(ci.드길),
       sales131_기획세트:  pn(ci.기획세트),
       sales131_합산:      pn(ci.합산매출),
       dailySales:         pn(ci.합산매출) || pn(28),
@@ -774,7 +774,7 @@ function parseCollabCosts(trackingMap) {
   return monthly;
 }
 
-// ── Parse: 오채(오프라인) 비용 집계 (TTL행, C열=1월 기준) ─────────
+// ── Parse: 옾채(오프라인) 비용 집계 (TTL행, C열=1월 기준) ─────────
 function parseOfflineCosts(rows) {
   const ttlRow = rows.find(r => String(r[1] || '').trim() === 'TTL');
   if (!ttlRow) return {};
@@ -972,7 +972,7 @@ function renderCostRoasCharts(sd, viralCosts, collabCosts, offlineCosts) {
           { label:'협력광고비',
             data: months.map(d => d.collab),
             backgroundColor:'#9575CD', borderRadius:[0,0,0,0], stack:'s' },
-          { label:'오채비용',
+          { label:'옾채비용',
             data: months.map(d => d.offline),
             backgroundColor:'#FF8A65', borderRadius:[0,0,4,4], stack:'s' },
         ]
@@ -1343,7 +1343,7 @@ function openDayModal(year, month, day, sales, events, week) {
       ])}
       ${makeGrp('131 합산 매출',[
         ['131단품 매출',  track.sales131_단품,     true],
-        ['더길 매출',     track.sales131_더길,     true],
+        ['드길 매출',     track.sales131_드길,     true],
         ['기획세트 매출', track.sales131_기획세트, true],
         ['131 합산',     track.sales131_합산,     true],
       ])}
@@ -1511,13 +1511,13 @@ function openCryModal() {
   const img     = document.getElementById('cry-img');
   if (_cryTimer) { clearTimeout(_cryTimer); _cryTimer = null; }
   img.style.opacity = '1';
-  img.src = 'cry1.jpg';
+  img.src = 'cry1.jpg.webp';
   overlay.style.display = 'block';
   modal.style.display   = 'block';
   document.body.style.overflow = 'hidden';
   _cryTimer = setTimeout(() => {
     img.style.opacity = '0';
-    setTimeout(() => { img.src = 'cry2.jpg'; img.style.opacity = '1'; }, 300);
+    setTimeout(() => { img.src = 'cry2.jpg.webp'; img.style.opacity = '1'; }, 300);
     _cryTimer = null;
   }, 2000);
 }
@@ -1681,7 +1681,7 @@ init();
   <div id="mkt-action-body" class="px-6 py-5 space-y-5"></div>
 </div>
 
-<!-- ── 울고 싶어 눌러보기 모달 ── -->
+<!-- ── 울고 싶을 때 누르기 모달 ── -->
 <div id="cry-modal-overlay" onclick="closeCryModal()"
      style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;"></div>
 <div id="cry-modal"
