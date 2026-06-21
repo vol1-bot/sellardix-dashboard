@@ -655,7 +655,7 @@ function parseTracking(rows) {
       search_131앰플:     pn(ci.앰플131),
       자사몰_131앰플:     pn(ci.자사몰),
       메타_131앰플관계비: pn(ci.관계비),
-      협력관계비:         pn(ci.협력),
+      협력광고비:         pn(ci.협력),
       sales131_단품:      pn(ci.단품),
       sales131_드길:      pn(ci.드길),
       sales131_기획세트:  pn(ci.기획세트),
@@ -762,13 +762,13 @@ function parseViralCosts(rows) {
   return monthly;
 }
 
-// ── Parse: 협력관계비 (트랙킹 O열 일별 합계) ──────────────────────
+// ── Parse: 협력광고비 (트랙킹 O열 일별 합계) ──────────────────────
 function parseCollabCosts(trackingMap) {
   const monthly = {};
   for (const [dayKey, data] of Object.entries(trackingMap)) {
     const m = parseInt(dayKey.split('.')[0]);
-    if (m >= 1 && m <= 12 && data.협력관계비) {
-      monthly[m] = (monthly[m] || 0) + data.협력관계비;
+    if (m >= 1 && m <= 12 && data.협력광고비) {
+      monthly[m] = (monthly[m] || 0) + data.협력광고비;
     }
   }
   return monthly;
@@ -1339,7 +1339,7 @@ function openDayModal(year, month, day, sales, events, week) {
       ])}
       ${makeGrp('메타 광고비',[
         ['131앰플 광고비', track.메타_131앰플관계비, true],
-        ['협력광고비',     track.협력관계비,          true],
+        ['협력광고비',     track.협력광고비,          true],
       ])}
       ${makeGrp('131 합산 매출',[
         ['131단품 매출',  track.sales131_단품,     true],
@@ -1348,14 +1348,14 @@ function openDayModal(year, month, day, sales, events, week) {
         ['131 합산',     track.sales131_합산,     true],
       ])}
       ${(()=>{
-        const collab = track.협력관계비 || 0;
+        const collab = track.협력광고비 || 0;
         const total  = track.sales131_합산 || 0;
         const roasStr = (!collab) ? '—' : `${Math.round(total/collab*100).toLocaleString()}%`;
         return `<div>
-          <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1 mb-1">협력관계 ROAS</p>
+          <p class="text-[11px] font-bold text-gray-400 uppercase tracking-wide px-1 mb-1">협력광고비 ROAS</p>
           <div class="border border-gray-100 rounded-xl overflow-hidden mb-3">
             <div class="flex justify-between items-center px-3 py-2.5 text-sm bg-white">
-              <span class="text-gray-600">131합산 / 협력관계비</span>
+              <span class="text-gray-600">131합산 / 협력광고비</span>
               <span class="font-semibold ${collab?'text-indigo-600':'text-gray-300'}">${roasStr}</span>
             </div>
           </div>
